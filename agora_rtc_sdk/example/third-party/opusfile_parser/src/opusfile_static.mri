@@ -1,0 +1,6 @@
+create libopusfile_parser.a
+addlib libogg.a
+addlib libopus.a
+addlib libopusfile.a
+save
+end
