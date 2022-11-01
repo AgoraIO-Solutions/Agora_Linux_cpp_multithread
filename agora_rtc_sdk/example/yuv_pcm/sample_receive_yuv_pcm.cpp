@@ -10,6 +10,7 @@
 #include <string>
 #include <thread>
 #include <ctime>
+#include <cstdlib>
 
 #include "AgoraRefCountedObject.h"
 #include "IAgoraService.h"
@@ -144,21 +145,26 @@ void YuvFrameObserver::onFrame(const char *channelId, agora::user_id_t remoteUid
   // check to see if frame is already saved
   if (video_frame_saved_flag)
     return;
-
   // Create new file to save received YUV frames
+  std::string fileName;
+  std::string fileNameJpg;
+  std::string fileNameYUV;
+  std::string command;
   if (!yuvFile_)
   {
-    std::string fileName = (++fileCount > 1)
+    fileName = (++fileCount > 1)
                                ? (outputFilePath_ + "_" + channelId + "_" + to_string(fileCount))
-                               : outputFilePath_ + "_" + channelId + "_" + to_string(time(0)) + ".yuv";
-    if (!(yuvFile_ = fopen(fileName.c_str(), "w+")))
+                               : outputFilePath_ + "_" + channelId + "_" + to_string(time(0));
+    fileNameYUV = fileName + ".yuv";
+    fileNameJpg = fileName + ".jpg";
+    if (!(yuvFile_ = fopen(fileNameYUV.c_str(), "w+")))
     {
       AG_LOG(ERROR, "Failed to create received video file %s",
-             fileName.c_str());
+             fileNameYUV.c_str());
       return;
     }
     AG_LOG(INFO, "Created file %s to save received YUV frames",
-           fileName.c_str());
+           fileNameYUV.c_str());
   }
 
   // Write Y planar
@@ -187,14 +193,21 @@ void YuvFrameObserver::onFrame(const char *channelId, agora::user_id_t remoteUid
     return;
   }
   fileSize_ += writeBytes;
+
   video_frame_saved_flag = 1;
   // Close the file if size limit is reached
-  if (fileSize_ >= DEFAULT_FILE_LIMIT)
+  //if (fileSize_ >= DEFAULT_FILE_LIMIT)
   {
     fclose(yuvFile_);
     yuvFile_ = nullptr;
     fileSize_ = 0;
   }
+
+  //convert to jpg format
+  command = "ffmpeg -f rawvideo -vcodec rawvideo -s " + to_string(videoFrame->yStride) + "x" + to_string(videoFrame->height) + " -r 1 -pix_fmt yuv420p -i "
+	      + fileNameYUV + " -preset ultrafast -qp 0 " + fileNameJpg;
+  system(command.c_str());
+  AG_LOG(INFO, "ffmpeg conver YUV to jpeg, command: %s", command.c_str());
   return;
 };
 
@@ -376,7 +389,6 @@ int main(int argc, char *argv[])
     }
   } while (!exitFlag); //check exit flag
 
-  // while ((time(0) - current_conn_time) > time_20_s);
   // Destroy Agora Service
   service->release();
   service = nullptr;
