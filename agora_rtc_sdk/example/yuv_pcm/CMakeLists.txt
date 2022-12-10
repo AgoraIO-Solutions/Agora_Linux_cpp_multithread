@@ -17,3 +17,9 @@ file(GLOB SAMPLE_RECEIVE_YUV_PCM_CPP_FILES
      "${PROJECT_SOURCE_DIR}/sample_receive_yuv_pcm.cpp"
      "${PROJECT_SOURCE_DIR}/../common/*.cpp")
 add_executable(sample_receive_yuv_pcm ${SAMPLE_RECEIVE_YUV_PCM_CPP_FILES})
+
+# Build sample_multithd_receive_yuv_pcm
+file(GLOB SAMPLE_MULTITHD_RECEIVE_YUV_PCM_CPP_FILES
+     "${PROJECT_SOURCE_DIR}/sample_multithd_receive_yuv_pcm.cpp"
+     "${PROJECT_SOURCE_DIR}/../common/*.cpp")
+add_executable(sample_multithd_receive_yuv_pcm ${SAMPLE_MULTITHD_RECEIVE_YUV_PCM_CPP_FILES})

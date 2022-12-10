@@ -36,8 +36,10 @@
 #define STREAM_TYPE_LOW "low"
 
 int time_20_s = 20;
-int time_2_s = 2;
+int time_2_s = 1;
 static bool video_frame_saved_flag = 0;
+//agora::base::IAgoraService service;
+agora::rtc::RtcConnectionConfiguration ccfg;
 
 struct SampleOptions
 {
@@ -54,7 +56,16 @@ struct SampleOptions
     int sampleRate = DEFAULT_SAMPLE_RATE;
     int numOfChannels = DEFAULT_NUM_OF_CHANNELS;
   } audio;
+
 };
+
+SampleOptions options;
+struct VideoControl
+  {
+    bool video_frame_saved_flag = 0;
+    //  int time_2_s = 2;
+    //  int time_20_s = 20;
+  };
 
 class PcmFrameObserver : public agora::media::IAudioFrameObserverBase
 {
@@ -85,11 +96,12 @@ private:
 class YuvFrameObserver : public agora::rtc::IVideoFrameObserver2
 {
 public:
-  YuvFrameObserver(const std::string &outputFilePath)
+  YuvFrameObserver(const std::string &outputFilePath, bool video_frame_saved_flag)
       : outputFilePath_(outputFilePath),
         yuvFile_(nullptr),
         fileCount(0),
-        fileSize_(0) {}
+        fileSize_(0),
+        video_frame_saved_flag_(video_frame_saved_flag) {}
 
   void onFrame(const char *channelId, agora::user_id_t remoteUid, const agora::media::base::VideoFrame *frame) override;
 
@@ -100,7 +112,119 @@ private:
   FILE *yuvFile_;
   int fileCount;
   int fileSize_;
+  int video_frame_saved_flag_;
 };
+
+static int connectWorkerObj(agora::base::IAgoraService* service, int& channel_index) {
+  time_t current_conn_time;
+  VideoControl saveVideoControl;
+  agora::agora_refptr<agora::rtc::IRtcConnection> connection =
+      service->createRtcConnection(ccfg);
+  if (!connection)
+  {
+    AG_LOG(ERROR, "Failed to creating Agora connection!");
+    return -1;
+  }
+
+  // Subcribe streams from all remote users or specific remote user
+  agora::rtc::VideoSubscriptionOptions subscriptionOptions;
+  if (options.streamType == STREAM_TYPE_HIGH)
+  {
+    subscriptionOptions.type = agora::rtc::VIDEO_STREAM_HIGH;
+  }
+  else if (options.streamType == STREAM_TYPE_LOW)
+  {
+    subscriptionOptions.type = agora::rtc::VIDEO_STREAM_LOW;
+  }
+  else
+  {
+    AG_LOG(ERROR, "It is a error stream type");
+    return -1;
+  }
+  if (options.remoteUserId.empty())
+  {
+    AG_LOG(INFO, "Subscribe streams from all remote users");
+    connection->getLocalUser()->subscribeAllAudio();
+    connection->getLocalUser()->subscribeAllVideo(subscriptionOptions);
+  }
+  else
+  {
+    connection->getLocalUser()->subscribeAudio(options.remoteUserId.c_str());
+    connection->getLocalUser()->subscribeVideo(options.remoteUserId.c_str(),
+                                               subscriptionOptions);
+  }
+  // Register connection observer to monitor connection event
+  auto connObserver = std::make_shared<SampleConnectionObserver>();
+  connection->registerObserver(connObserver.get());
+
+  // Create local user observer
+  auto localUserObserver =
+      std::make_shared<SampleLocalUserObserver>(connection->getLocalUser());
+
+  // Register audio frame observer to receive audio stream
+  auto pcmFrameObserver = std::make_shared<PcmFrameObserver>(options.audioFile);
+
+  if (connection->getLocalUser()->setPlaybackAudioFrameBeforeMixingParameters(
+          options.audio.numOfChannels, options.audio.sampleRate))
+  {
+    AG_LOG(ERROR, "Failed to set audio frame parameters!");
+    return -1;
+  }
+  localUserObserver->setAudioFrameObserver(pcmFrameObserver.get());
+
+  // Register video frame observer to receive video stream
+  std::shared_ptr<YuvFrameObserver> yuvFrameObserver =
+      //std::make_shared<YuvFrameObserver>(options.videoFile);
+      std::make_shared<YuvFrameObserver>(options.videoFile, saveVideoControl.video_frame_saved_flag);
+  localUserObserver->setVideoFrameObserver(yuvFrameObserver.get());
+
+  // Connect to Agora channel
+  //if (connection->connect(options.appId.c_str(), (options.channelId+to_string(100)).c_str(),
+  if (connection->connect(options.appId.c_str(), (options.channelId+to_string(channel_index)).c_str(),
+                          options.userId.c_str()))
+  {
+    AG_LOG(ERROR, "Failed to connect to Agora channel!");
+    return -1;
+  }
+
+  // reset timer and flag
+  current_conn_time = time(0);
+  saveVideoControl.video_frame_saved_flag = 0;
+  // Periodically check if in the channel for 2s
+  while (time(0) - current_conn_time <= time_2_s)
+  {
+    usleep(100000);
+  }
+  // Unregister audio & video frame observers
+  localUserObserver->unsetAudioFrameObserver();
+  localUserObserver->unsetVideoFrameObserver();
+
+  // Unregister connection observer
+  connection->unregisterObserver(connObserver.get());
+
+  // Disconnect from Agora channel
+  if (connection->disconnect())
+  {
+    AG_LOG(ERROR, "Failed to disconnect from Agora channel!");
+    return -1;
+  }
+  AG_LOG(INFO, "Disconnected from Agora channel successfully");
+
+  // Destroy Agora connection and related resources
+  localUserObserver.reset();
+  pcmFrameObserver.reset();
+  yuvFrameObserver.reset();
+  connection = nullptr;
+
+  // Periodically check if it has been 20s
+  while ((time(0) - current_conn_time) < time_20_s)
+  {
+    AG_LOG(INFO, "current time: %ld", time(0));
+    AG_LOG(INFO, "channel index: %d", channel_index);
+    sleep(5);  //5s 
+  }
+  return 0;
+}
 
 bool PcmFrameObserver::onPlaybackAudioFrameBeforeMixing(const char *channelId, agora::media::base::user_id_t userId, AudioFrame &audioFrame)
 {
@@ -143,7 +267,7 @@ bool PcmFrameObserver::onPlaybackAudioFrameBeforeMixing(const char *channelId, a
 void YuvFrameObserver::onFrame(const char *channelId, agora::user_id_t remoteUid, const agora::media::base::VideoFrame *videoFrame)
 {
   // check to see if frame is already saved
-  if (video_frame_saved_flag)
+  if (video_frame_saved_flag_)
     return;
   // Create new file to save received YUV frames
   std::string fileName;
@@ -153,8 +277,8 @@ void YuvFrameObserver::onFrame(const char *channelId, agora::user_id_t remoteUid
   if (!yuvFile_)
   {
     fileName = (++fileCount > 1)
-                               ? (outputFilePath_ + "_" + channelId + "_" + to_string(fileCount))
-                               : outputFilePath_ + "_" + channelId + "_" + to_string(time(0));
+                   ? (outputFilePath_ + "_" + channelId + "_" + to_string(fileCount))
+                   : outputFilePath_ + "_" + channelId + "_" + to_string(time(0));
     fileNameYUV = fileName + ".yuv";
     fileNameJpg = fileName + ".jpg";
     if (!(yuvFile_ = fopen(fileNameYUV.c_str(), "w+")))
@@ -194,18 +318,17 @@ void YuvFrameObserver::onFrame(const char *channelId, agora::user_id_t remoteUid
   }
   fileSize_ += writeBytes;
 
-  video_frame_saved_flag = 1;
+  video_frame_saved_flag_ = 1;
   // Close the file if size limit is reached
-  //if (fileSize_ >= DEFAULT_FILE_LIMIT)
+  // if (fileSize_ >= DEFAULT_FILE_LIMIT)
   {
     fclose(yuvFile_);
     yuvFile_ = nullptr;
     fileSize_ = 0;
   }
 
-  //convert to jpg format
-  command = "ffmpeg -f rawvideo -vcodec rawvideo -s " + to_string(videoFrame->yStride) + "x" + to_string(videoFrame->height) + " -r 1 -pix_fmt yuv420p -i "
-	      + fileNameYUV + " -preset ultrafast -qp 0 " + fileNameJpg;
+  // convert to jpg format
+  command = "ffmpeg -f rawvideo -vcodec rawvideo -s " + to_string(videoFrame->yStride) + "x" + to_string(videoFrame->height) + " -r 1 -pix_fmt yuv420p -i " + fileNameYUV + " -preset ultrafast -qp 0 " + fileNameJpg;
   system(command.c_str());
   AG_LOG(INFO, "ffmpeg conver YUV to jpeg, command: %s", command.c_str());
   return;
@@ -216,7 +339,7 @@ static void SignalHandler(int sigNo) { exitFlag = true; }
 
 int main(int argc, char *argv[])
 {
-  SampleOptions options;
+  //SampleOptions options;
   opt_parser optParser;
   time_t current_conn_time;
 
@@ -271,123 +394,24 @@ int main(int argc, char *argv[])
   audioSubOpt.numberOfChannels = options.audio.numOfChannels;
   audioSubOpt.sampleRateHz = options.audio.sampleRate;
 
-  agora::rtc::RtcConnectionConfiguration ccfg;
+//  agora::rtc::RtcConnectionConfiguration ccfg;
   ccfg.clientRoleType = agora::rtc::CLIENT_ROLE_AUDIENCE;
   ccfg.audioSubscriptionOptions = audioSubOpt;
   ccfg.autoSubscribeAudio = false;
   ccfg.autoSubscribeVideo = false;
   ccfg.enableAudioRecordingOrPlayout =
       false; // Subscribe audio but without playback
-
-  //start the connect -> save frame -> disconnect loop
+  int channel_index = 100;
+  int channel_index2 = 200;
+  // start the connect -> save frame -> disconnect loop
   do
   {
-    agora::agora_refptr<agora::rtc::IRtcConnection> connection =
-        service->createRtcConnection(ccfg);
-    if (!connection)
-    {
-      AG_LOG(ERROR, "Failed to creating Agora connection!");
-      return -1;
-    }
-
-    // Subcribe streams from all remote users or specific remote user
-    agora::rtc::VideoSubscriptionOptions subscriptionOptions;
-    if (options.streamType == STREAM_TYPE_HIGH)
-    {
-      subscriptionOptions.type = agora::rtc::VIDEO_STREAM_HIGH;
-    }
-    else if (options.streamType == STREAM_TYPE_LOW)
-    {
-      subscriptionOptions.type = agora::rtc::VIDEO_STREAM_LOW;
-    }
-    else
-    {
-      AG_LOG(ERROR, "It is a error stream type");
-      return -1;
-    }
-    if (options.remoteUserId.empty())
-    {
-      AG_LOG(INFO, "Subscribe streams from all remote users");
-      connection->getLocalUser()->subscribeAllAudio();
-      connection->getLocalUser()->subscribeAllVideo(subscriptionOptions);
-    }
-    else
-    {
-      connection->getLocalUser()->subscribeAudio(options.remoteUserId.c_str());
-      connection->getLocalUser()->subscribeVideo(options.remoteUserId.c_str(),
-                                                 subscriptionOptions);
-    }
-    // Register connection observer to monitor connection event
-    auto connObserver = std::make_shared<SampleConnectionObserver>();
-    connection->registerObserver(connObserver.get());
-
-    // Create local user observer
-    auto localUserObserver =
-        std::make_shared<SampleLocalUserObserver>(connection->getLocalUser());
-
-    // Register audio frame observer to receive audio stream
-    auto pcmFrameObserver = std::make_shared<PcmFrameObserver>(options.audioFile);
-
-    if (connection->getLocalUser()->setPlaybackAudioFrameBeforeMixingParameters(
-            options.audio.numOfChannels, options.audio.sampleRate))
-    {
-      AG_LOG(ERROR, "Failed to set audio frame parameters!");
-      return -1;
-    }
-    localUserObserver->setAudioFrameObserver(pcmFrameObserver.get());
-
-    // Register video frame observer to receive video stream
-    std::shared_ptr<YuvFrameObserver> yuvFrameObserver =
-        std::make_shared<YuvFrameObserver>(options.videoFile);
-    localUserObserver->setVideoFrameObserver(yuvFrameObserver.get());
-
-    // Connect to Agora channel
-    if (connection->connect(options.appId.c_str(), options.channelId.c_str(),
-                            options.userId.c_str()))
-    {
-      AG_LOG(ERROR, "Failed to connect to Agora channel!");
-      return -1;
-    }
-
-    // reset timer and flag
-    current_conn_time = time(0);
-    video_frame_saved_flag = 0;
-
-    // Start receiving incoming media data
-    AG_LOG(INFO, "Start receiving audio & video data ...");
-
-    // Periodically check if in the channel for 2s
-    while (time(0) - current_conn_time <=0 /*time_2_s*/)
-    {
-      usleep(100000);
-    }
-    // Unregister audio & video frame observers
-    localUserObserver->unsetAudioFrameObserver();
-    localUserObserver->unsetVideoFrameObserver();
-
-    // Unregister connection observer
-    connection->unregisterObserver(connObserver.get());
-
-    // Disconnect from Agora channel
-    if (connection->disconnect())
-    {
-      AG_LOG(ERROR, "Failed to disconnect from Agora channel!");
-      return -1;
-    }
-    AG_LOG(INFO, "Disconnected from Agora channel successfully");
-
-    // Destroy Agora connection and related resources
-    localUserObserver.reset();
-    pcmFrameObserver.reset();
-    yuvFrameObserver.reset();
-    connection = nullptr;
-
-    // Periodically check if it has been 20s
-    while ((time(0) - current_conn_time) < time_20_s)
-    {
-      sleep(5); //5 seconds
-    }
-  } while (!exitFlag); //check exit flag
+    //std::thread thobj(connectWorkerObj(), 100);
+    std::thread workerthobj1(connectWorkerObj, service, std::ref(channel_index));
+    std::thread workerthobj2(connectWorkerObj, service, std::ref(channel_index2));
+    workerthobj1.join();
+    workerthobj2.join();
+  } while (!exitFlag); // check exit flag
 
   // Destroy Agora Service
   service->release();
