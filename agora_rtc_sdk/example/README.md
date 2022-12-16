@@ -16,6 +16,10 @@ Also, download the media files by running sync-data.sh script. These audio/video
 
 #### Example:
 ```
+$cd out
+$export LD_LIBRARY_PATH=../../agora_sdk:$LD_LIBRARY_PATH
 To send aac stream to Agora channel named "demo_channel". Note that `xxxxxx` should be replaced with your own App ID or token
-$ out/sample_send_aac --token XXXXXX --channelId demo_channel --audioFile test_data/send_audio.aac
+$ ./sample_send_aac --token XXXXXX --channelId demo_channel --audioFile test_data/send_audio.aac
 ```
+To receive stream and take snapshots of video from remove user 1234, every 20s from multi-channels using multi-threading implementation
+$./sample_multithd_receive_yuv_pcm --token XXXXXX --channelId multidemo --multiChannels 10 —remoteUserId 1234
