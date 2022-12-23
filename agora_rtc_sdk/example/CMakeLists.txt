@@ -12,6 +12,8 @@ endif()
 
 set(AGORA_MEDIA_SDK_DIR ${CMAKE_SOURCE_DIR}/../agora_sdk)
 set(AGORA_MEDIA_SDK_HEADER_DIR ${CMAKE_SOURCE_DIR}/../agora_sdk)
+set(JPEGLIB_DIR ${CMAKE_SOURCE_DIR}/../libjpg/lib)
+set(JPEGLIB_HEADER_DIR ${CMAKE_SOURCE_DIR}/../libjpg)
 
 # Set common flags
 set(CMAKE_DEBUG_POSTFIX "")
@@ -31,11 +33,12 @@ include_directories(
   "${THIRD_PARTY}/json_parser/include"
   "${THIRD_PARTY}/opusfile_parser/include"
   "${CMAKE_SOURCE_DIR}"
-  "${AGORA_MEDIA_SDK_HEADER_DIR}/include")
+  "${AGORA_MEDIA_SDK_HEADER_DIR}/include"
+  "${JPEGLIB_HEADER_DIR}/include")
 
 # Link common libs
-link_directories(${AGORA_MEDIA_SDK_DIR})
-link_libraries(${LIB_SDK} ${LIB_THREAD})
+link_directories(${AGORA_MEDIA_SDK_DIR} ${JPEGLIB_DIR})
+link_libraries(${LIB_SDK} ${LIB_IJP} ${LIB_THREAD})
 
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/out/)
 
