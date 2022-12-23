@@ -26,6 +26,7 @@
 #include "NGIAgoraMediaNodeFactory.h"
 #include "NGIAgoraMediaNode.h"
 #include "NGIAgoraVideoTrack.h"
+#include "jpeglib.h"
 
 #define DEFAULT_SAMPLE_RATE (16000)
 #define DEFAULT_NUM_OF_CHANNELS (1)
@@ -38,6 +39,8 @@
 int time_20_s = 20;
 int time_2_s = 2;
 
+static bool exitFlag = false;
+static void SignalHandler(int sigNo) { exitFlag = true; }
 agora::rtc::RtcConnectionConfiguration ccfg;
 
 struct SampleOptions
@@ -96,6 +99,7 @@ public:
   YuvFrameObserver(const std::string &outputFilePath, bool video_frame_saved_flag)
       : outputFilePath_(outputFilePath),
         yuvFile_(nullptr),
+        jpgFile_(nullptr),
         fileCount(0),
         fileSize_(0),
         video_frame_saved_flag_(video_frame_saved_flag) {}
@@ -107,6 +111,7 @@ public:
 private:
   std::string outputFilePath_;
   FILE *yuvFile_;
+  FILE *jpgFile_;
   int fileCount;
   int fileSize_;
   int video_frame_saved_flag_;
@@ -163,7 +168,7 @@ static int connectWorker(agora::base::IAgoraService *service, int channel_index,
     // Create local user observer
     auto localUserObserver =
         std::make_shared<SampleLocalUserObserver>(connection->getLocalUser());
-
+#if 0
     // Register audio frame observer to receive audio stream
     auto pcmFrameObserver = std::make_shared<PcmFrameObserver>(options.audioFile);
 
@@ -174,7 +179,7 @@ static int connectWorker(agora::base::IAgoraService *service, int channel_index,
       return -1;
     }
     localUserObserver->setAudioFrameObserver(pcmFrameObserver.get());
-
+#endif
     // Register video frame observer to receive video stream
     std::shared_ptr<YuvFrameObserver> yuvFrameObserver =
         // std::make_shared<YuvFrameObserver>(options.videoFile);
@@ -193,12 +198,12 @@ static int connectWorker(agora::base::IAgoraService *service, int channel_index,
     current_conn_time = time(0);
     saveVideoControl.video_frame_saved_flag = 0;
     // Periodically check if in the channel for 2s
-    while ((time(0) - current_conn_time <= time_2_s)&&(!exitFlag))
+    while ((time(0) - current_conn_time <= time_2_s) && (!exitFlag))
     {
       usleep(500000);
     }
     // Unregister audio & video frame observers
-    localUserObserver->unsetAudioFrameObserver();
+    //localUserObserver->unsetAudioFrameObserver();
     localUserObserver->unsetVideoFrameObserver();
 
     // Unregister connection observer
@@ -214,7 +219,7 @@ static int connectWorker(agora::base::IAgoraService *service, int channel_index,
 
     // Destroy Agora connection and related resources
     localUserObserver.reset();
-    pcmFrameObserver.reset();
+    //pcmFrameObserver.reset();
     yuvFrameObserver.reset();
     connection = nullptr;
 
@@ -223,7 +228,7 @@ static int connectWorker(agora::base::IAgoraService *service, int channel_index,
     {
       // AG_LOG(INFO, "channel index: %d", channel_index);
       // usleep(5000000); // 5s
-      sleep(5); // 5s
+      sleep(2); // 5s
     }
   };
   return 0;
@@ -275,6 +280,7 @@ void YuvFrameObserver::onFrame(const char *channelId, agora::user_id_t remoteUid
   // Create new file to save received YUV frames
   std::string fileName;
   std::string fileNameJpg;
+#if 0
   std::string fileNameYUV;
   std::string command;
   if (!yuvFile_)
@@ -332,13 +338,91 @@ void YuvFrameObserver::onFrame(const char *channelId, agora::user_id_t remoteUid
   // convert to jpg format
   command = "ffmpeg -f rawvideo -vcodec rawvideo -s " + to_string(videoFrame->yStride) + "x" + to_string(videoFrame->height) + " -r 1 -pix_fmt yuv420p -i " + fileNameYUV + " -preset ultrafast -qp 0 " + fileNameJpg;
   //system(command.c_str());
-  video_frame_saved_flag_ = 1;
   //AG_LOG(INFO, "ffmpeg conver YUV to jpeg, command: %s", command.c_str());
+
+#else
+  struct jpeg_compress_struct cinfo;
+  struct jpeg_error_mgr jerr;
+  if (!jpgFile_)
+  {
+    fileName = (++fileCount > 1)
+                   ? (outputFilePath_ + "_" + channelId + "_" + to_string(fileCount))
+                   : outputFilePath_ + "_" + channelId + "_" + to_string(time(0));
+    fileNameJpg = fileName + ".jpg";
+    if (!(jpgFile_ = fopen(fileNameJpg.c_str(), "wb")))
+    {
+      AG_LOG(ERROR, "Failed to create received video file %s",
+             fileNameJpg.c_str());
+      return;
+    }
+    AG_LOG(INFO, "Created file %s to save received JPEG frames",
+           fileNameJpg.c_str());
+  }
+  int width = videoFrame->yStride;
+  unsigned char *yuvbuf = NULL;
+  if ((yuvbuf = (unsigned char *)malloc(width * 3)) == NULL)
+  {
+    AG_LOG(ERROR, "yuv buf malloc failed: %s", std::strerror(errno));
+    return;
+  }
+  //memset(yuvbuf, 0, width * 3);
+
+  cinfo.err = jpeg_std_error(&jerr);
+  jpeg_create_compress(&cinfo);
+  /* save to a file */
+  jpeg_stdio_dest(&cinfo, jpgFile_);
+  cinfo.image_width = videoFrame->yStride;
+  cinfo.image_height = videoFrame->height;
+  cinfo.input_components = 3;
+  cinfo.in_color_space = JCS_YCbCr; /*  YUV444  */
+  cinfo.dct_method = JDCT_FLOAT;
+  jpeg_set_defaults(&cinfo);
+
+  /* set jpeg image quality，range [0,100] */
+  jpeg_set_quality(&cinfo, 40, TRUE);
+
+  /* start */
+  jpeg_start_compress(&cinfo, TRUE);
+
+  unsigned char *ybase, *ubase, *vbase;
+  ybase = videoFrame->yBuffer;
+  ubase = videoFrame->uBuffer;
+  vbase = videoFrame->vBuffer;
+  /* process data */
+  JSAMPROW row_pointer[1];
+  int j = 0;
+  int idx;
+  while (cinfo.next_scanline < cinfo.image_height)
+  {
+    idx = 0;
+    for (int i = 0; i < width; i++) /* convert yuv420p to yuv444 */
+    {
+      yuvbuf[idx++] = ybase[i + j * width];
+      yuvbuf[idx++] = ubase[j / 4 * width + (i / 2)];
+      yuvbuf[idx++] = vbase[j / 4 * width + (i / 2)];
+    }
+    row_pointer[0] = yuvbuf;
+    jpeg_write_scanlines(&cinfo, row_pointer, 1);
+    j++;
+  }
+
+  /* stop */
+  jpeg_finish_compress(&cinfo);
+  /* destroy */
+  jpeg_destroy_compress(&cinfo);
+  fclose(jpgFile_);
+  jpgFile_ = nullptr;
+  if (yuvbuf)
+  {
+    free(yuvbuf);
+    yuvbuf = NULL;
+  }
+  //AG_LOG(INFO, "libjpeg convert YUV to jpeg");
+#endif
+  video_frame_saved_flag_ = 1;
   return;
 };
 
-static bool exitFlag = false;
-static void SignalHandler(int sigNo) { exitFlag = true; }
 #define MAX_NUM_OF_THREAD 100
 
 int main(int argc, char *argv[])
@@ -410,9 +494,9 @@ int main(int argc, char *argv[])
 
   for (int i = 0; i < options.multiChannels; ++i)
   {
-    AG_LOG(INFO, "!!!!!!!!!! index: %d", i);
+    // AG_LOG(INFO, "!!!!!!!!!! index: %d", i);
     th_array[i] = std::thread(connectWorker, service, i, std::ref(exitFlag));
-    usleep(5000); //add a pacing 
+    usleep(300000); // add a pacing
   }
 
   for (int i = 0; i < options.multiChannels; ++i)
