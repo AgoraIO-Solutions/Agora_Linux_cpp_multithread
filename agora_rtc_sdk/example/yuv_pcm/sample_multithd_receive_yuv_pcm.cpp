@@ -64,7 +64,7 @@ struct SampleOptions
 SampleOptions options;
 struct VideoControl
 {
-  bool video_frame_saved_flag = 0;
+  bool *video_frame_saved_flag;
 };
 
 class PcmFrameObserver : public agora::media::IAudioFrameObserverBase
@@ -96,7 +96,7 @@ private:
 class YuvFrameObserver : public agora::rtc::IVideoFrameObserver2
 {
 public:
-  YuvFrameObserver(const std::string &outputFilePath, bool video_frame_saved_flag)
+  YuvFrameObserver(const std::string &outputFilePath, bool *video_frame_saved_flag)
       : outputFilePath_(outputFilePath),
         yuvFile_(nullptr),
         jpgFile_(nullptr),
@@ -114,7 +114,7 @@ private:
   FILE *jpgFile_;
   int fileCount;
   int fileSize_;
-  int video_frame_saved_flag_;
+  bool *video_frame_saved_flag_;
 };
 
 static int connectWorker(agora::base::IAgoraService *service, int channel_index, bool &exitFlag)
@@ -123,6 +123,8 @@ static int connectWorker(agora::base::IAgoraService *service, int channel_index,
   time_t current_conn_time;
   VideoControl saveVideoControl;
   agora::agora_refptr<agora::rtc::IRtcConnection> connection;
+  bool save_file_flag;
+  saveVideoControl.video_frame_saved_flag = &save_file_flag;
 
   // AG_LOG(INFO, "!!!!!channel index: %d", channel_index);
   while (!exitFlag)
@@ -180,6 +182,7 @@ static int connectWorker(agora::base::IAgoraService *service, int channel_index,
     }
     localUserObserver->setAudioFrameObserver(pcmFrameObserver.get());
 #endif
+    *(saveVideoControl.video_frame_saved_flag) = 0;
     // Register video frame observer to receive video stream
     std::shared_ptr<YuvFrameObserver> yuvFrameObserver =
         // std::make_shared<YuvFrameObserver>(options.videoFile);
@@ -196,14 +199,15 @@ static int connectWorker(agora::base::IAgoraService *service, int channel_index,
 
     // reset timer and flag
     current_conn_time = time(0);
-    saveVideoControl.video_frame_saved_flag = 0;
+
     // Periodically check if in the channel for 2s
-    while ((time(0) - current_conn_time <= time_2_s) && (!exitFlag))
+    while ((!*saveVideoControl.video_frame_saved_flag || (time(0) - current_conn_time <= time_2_s)) && (!exitFlag))
     {
       usleep(500000);
     }
+
     // Unregister audio & video frame observers
-    //localUserObserver->unsetAudioFrameObserver();
+    // localUserObserver->unsetAudioFrameObserver();
     localUserObserver->unsetVideoFrameObserver();
 
     // Unregister connection observer
@@ -219,7 +223,7 @@ static int connectWorker(agora::base::IAgoraService *service, int channel_index,
 
     // Destroy Agora connection and related resources
     localUserObserver.reset();
-    //pcmFrameObserver.reset();
+    // pcmFrameObserver.reset();
     yuvFrameObserver.reset();
     connection = nullptr;
 
@@ -275,8 +279,11 @@ bool PcmFrameObserver::onPlaybackAudioFrameBeforeMixing(const char *channelId, a
 void YuvFrameObserver::onFrame(const char *channelId, agora::user_id_t remoteUid, const agora::media::base::VideoFrame *videoFrame)
 {
   // check to see if frame is already saved
-  if (video_frame_saved_flag_)
+  if (*video_frame_saved_flag_)
+  {
+    AG_LOG(INFO, "jpeg already saved, channe index %s", channelId);
     return;
+  }
   // Create new file to save received YUV frames
   std::string fileName;
   std::string fileNameJpg;
@@ -365,7 +372,7 @@ void YuvFrameObserver::onFrame(const char *channelId, agora::user_id_t remoteUid
     AG_LOG(ERROR, "yuv buf malloc failed: %s", std::strerror(errno));
     return;
   }
-  //memset(yuvbuf, 0, width * 3);
+  // memset(yuvbuf, 0, width * 3);
 
   cinfo.err = jpeg_std_error(&jerr);
   jpeg_create_compress(&cinfo);
@@ -417,9 +424,9 @@ void YuvFrameObserver::onFrame(const char *channelId, agora::user_id_t remoteUid
     free(yuvbuf);
     yuvbuf = NULL;
   }
-  //AG_LOG(INFO, "libjpeg convert YUV to jpeg");
+  // AG_LOG(INFO, "libjpeg convert YUV to jpeg");
 #endif
-  video_frame_saved_flag_ = 1;
+  *video_frame_saved_flag_ = 1;
   return;
 };
 
@@ -491,12 +498,12 @@ int main(int argc, char *argv[])
       false; // Subscribe audio but without playback
 
   //  start the connect -> save frame -> disconnect loop
-
+  int pacing_interval = 20 * 1000000 / options.multiChannels;
   for (int i = 0; i < options.multiChannels; ++i)
   {
     // AG_LOG(INFO, "!!!!!!!!!! index: %d", i);
     th_array[i] = std::thread(connectWorker, service, i, std::ref(exitFlag));
-    usleep(300000); // add a pacing
+    usleep(pacing_interval); // add a pacing
   }
 
   for (int i = 0; i < options.multiChannels; ++i)
