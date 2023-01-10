@@ -21,5 +21,8 @@ $export LD_LIBRARY_PATH=../../agora_sdk:$LD_LIBRARY_PATH
 To send aac stream to Agora channel named "demo_channel". Note that `xxxxxx` should be replaced with your own App ID or token
 $ ./sample_send_aac --token XXXXXX --channelId demo_channel --audioFile test_data/send_audio.aac
 ```
-To receive stream and take snapshots of video from remove user 1234, every 20s from multi-channels using multi-threading implementation
-$./sample_multithd_receive_yuv_pcm --token XXXXXX --channelId multidemo --multiChannels 10 —remoteUserId 1234
+Using multi-thread to join channels and take snapshots of video from remote user 1234 every 20s from multi-channels
+$./sample_multithd_receive_yuv_pcm --token XXXXXX --channelId multidemo --multiChannels 50 —remoteUserId 1234
+
+Using multi-thread to join multiple channels and sending video frames
+./sample_multithd_send_yuv_pcm --token XXXXXX --channelId multidemo --userId 1234 --multiChannel 30
