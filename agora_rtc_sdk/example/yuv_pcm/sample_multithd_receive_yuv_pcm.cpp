@@ -84,7 +84,17 @@ public:
 
   bool onPlaybackAudioFrameBeforeMixing(const char *channelId, agora::media::base::user_id_t userId, AudioFrame &audioFrame) override;
 
-  bool onEarMonitoringAudioFrame(AudioFrame &audioFrame) { return true; };
+  bool onEarMonitoringAudioFrame(AudioFrame &audioFrame) override { return true; };
+
+  AudioParams getEarMonitoringAudioParams() override { return AudioParams(); };
+
+  int getObservedAudioFramePosition() override { return 0; };
+
+  AudioParams getPlaybackAudioParams() override { return AudioParams(); };
+
+  AudioParams getRecordAudioParams() override { return AudioParams(); };
+
+  AudioParams getMixedAudioParams() override { return AudioParams(); };
 
 private:
   std::string outputFilePath_;
@@ -484,14 +494,8 @@ int main(int argc, char *argv[])
   }
 
   // Create Agora connection
-  agora::rtc::AudioSubscriptionOptions audioSubOpt;
-  audioSubOpt.bytesPerSample = sizeof(int16_t) * options.audio.numOfChannels;
-  audioSubOpt.numberOfChannels = options.audio.numOfChannels;
-  audioSubOpt.sampleRateHz = options.audio.sampleRate;
-
-  //  agora::rtc::RtcConnectionConfiguration ccfg;
+  agora::rtc::RtcConnectionConfiguration ccfg;
   ccfg.clientRoleType = agora::rtc::CLIENT_ROLE_AUDIENCE;
-  ccfg.audioSubscriptionOptions = audioSubOpt;
   ccfg.autoSubscribeAudio = false;
   ccfg.autoSubscribeVideo = false;
   ccfg.enableAudioRecordingOrPlayout =

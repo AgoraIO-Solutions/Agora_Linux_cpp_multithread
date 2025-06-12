@@ -201,8 +201,9 @@ int main(int argc, char* argv[]) {
 
 
 // Set the dual_model 
-  agora::rtc::SimulcastStreamConfig Low_streamConfig;
-  customVideoTrack->enableSimulcastStream(true, Low_streamConfig);
+  agora::rtc::SimulcastConfigInternal Low_streamConfig;
+  Low_streamConfig.simulcastlayerConfigs[agora::rtc::StreamLayerIndexInternal::STREAM_LOW].enable = true;
+  customVideoTrack->setSimulcastStreamMode(agora::rtc::SIMULCAST_STREAM_MODE::ENABLE_SIMULCAST_STREAM, Low_streamConfig);
 
   // Publish  video track
   connection->getLocalUser()->publishVideo(customVideoTrack);
@@ -215,10 +216,10 @@ int main(int argc, char* argv[]) {
 
   std::thread sendHighVideoThread(SampleSendVideoH264Task, options,
                               videoFrameSender, std::ref(exitFlag),
-                              agora::rtc::VIDEO_STREAM_HIGH);
+                              agora::rtc::VIDEO_STREAM_TYPE::VIDEO_STREAM_HIGH);
   std::thread sendLowVideoThread(SampleSendVideoH264Task, options,
                                videoFrameSender, std::ref(exitFlag),
-                               agora::rtc::VIDEO_STREAM_LOW);
+                               agora::rtc::VIDEO_STREAM_TYPE::VIDEO_STREAM_LOW);
   sendHighVideoThread.join();
   sendLowVideoThread.join();
   // Unpublish  video track

@@ -44,7 +44,7 @@ class H264FrameReceiver : public agora::media::IVideoEncodedFrameObserver {
         fileCount(0),
         fileSize_(0) {}
 
-  bool OnEncodedVideoFrame(agora::rtc::uid_t uid, const uint8_t* imageBuffer, size_t length,
+  bool onEncodedVideoFrameReceived(agora::rtc::uid_t uid, const uint8_t* imageBuffer, size_t length,
                                    const agora::rtc::EncodedVideoFrameInfo& videoEncodedFrameInfo)  override;
 
 
@@ -56,7 +56,7 @@ class H264FrameReceiver : public agora::media::IVideoEncodedFrameObserver {
   int fileSize_;
 };
 
-bool H264FrameReceiver:: OnEncodedVideoFrame(agora::rtc::uid_t uid, const uint8_t* imageBuffer, size_t length,
+bool H264FrameReceiver:: onEncodedVideoFrameReceived(agora::rtc::uid_t uid, const uint8_t* imageBuffer, size_t length,
                                    const agora::rtc::EncodedVideoFrameInfo& videoEncodedFrameInfo) 
 
  {

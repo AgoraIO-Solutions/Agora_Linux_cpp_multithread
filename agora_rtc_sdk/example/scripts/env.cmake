@@ -19,8 +19,7 @@ endmacro()
 find_path(third_party_path NAMES third-party PATHS ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/../../ NO_DEFAULT_PATH REQUIRED)
 set(THIRD_PARTY ${third_party_path}/third-party)
 
-find_library(LIB_SDK NAMES agora_rtc_sdk agora-rtc-sdk agora-rtsa-sdk PATHS ${CMAKE_SOURCE_DIR}/../agora_sdk/ NO_DEFAULT_PATH REQUIRED)
-
+find_library(LIB_SDK NAMES agora_rtc_sdk agora-rtsa-sdk PATHS ${CMAKE_SOURCE_DIR}/../agora_sdk/ NO_DEFAULT_PATH REQUIRED)
 find_library(LIB_IJP NAMES jpeg PATHS ${CMAKE_SOURCE_DIR}/../libjpg/lib/ NO_DEFAULT_PATH REQUIRED)
 
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath=.:../agora_sdk/:../../agora_sdk/")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath=.:../agora_sdk/:../../agora_sdk/:../libjpg/lib")

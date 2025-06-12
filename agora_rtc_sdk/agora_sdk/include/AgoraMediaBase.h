@@ -1,4 +1,3 @@
-//
 //  Agora Engine SDK
 //
 //  Created by Sting Feng in 2017-11.
@@ -29,12 +28,127 @@ namespace rtc {
 typedef unsigned int uid_t;
 typedef unsigned int track_id_t;
 typedef unsigned int conn_id_t;
+typedef unsigned int video_track_id_t;
 
+static const unsigned int INVALID_TRACK_ID = 0xffffffff;
 static const unsigned int DEFAULT_CONNECTION_ID = 0;
 static const unsigned int DUMMY_CONNECTION_ID = (std::numeric_limits<unsigned int>::max)();
 
-
 struct EncodedVideoFrameInfo;
+/**
+* The definition of extension context types.
+**/
+struct ExtensionContext {
+    /** 
+     * Whether the uid is valid.
+     * - true: The uid is valid.
+     * - false: The uid is invalid.
+     */
+    bool isValid;
+    /** 
+     * The ID of the user.
+     * A uid of 0 indicates the local user, and a uid greater than 0 represents a remote user.
+     */
+    uid_t uid;
+    /** 
+     * The provider name of the current extension.
+     */
+    const char *providerName;
+    /** 
+     * The extension name of the current extension.
+     */
+    const char *extensionName;
+    /** 
+     * Connection ID
+     */
+    conn_id_t connId;
+    /** 
+     * User context
+     */
+    void* userContext;
+    ExtensionContext():isValid(false), uid(0), providerName(NULL), extensionName(NULL), connId(0), userContext(NULL) {}
+};
+
+/**
+ * Video source types definition.
+ **/
+enum VIDEO_SOURCE_TYPE {
+  /** Video captured by the camera.
+   */
+  VIDEO_SOURCE_CAMERA_PRIMARY = 0,
+  VIDEO_SOURCE_CAMERA = VIDEO_SOURCE_CAMERA_PRIMARY,
+  /** Video captured by the secondary camera.
+   */
+  VIDEO_SOURCE_CAMERA_SECONDARY = 1,
+  /** Video for screen sharing.
+   */
+  VIDEO_SOURCE_SCREEN_PRIMARY = 2,
+  VIDEO_SOURCE_SCREEN = VIDEO_SOURCE_SCREEN_PRIMARY,
+  /** Video for secondary screen sharing.
+   */
+  VIDEO_SOURCE_SCREEN_SECONDARY = 3,
+  /** Not define.
+   */
+  VIDEO_SOURCE_CUSTOM = 4,
+  /** Video for media player sharing.
+   */
+  VIDEO_SOURCE_MEDIA_PLAYER = 5,
+  /** Video for png image.
+   */
+  VIDEO_SOURCE_RTC_IMAGE_PNG = 6,
+  /** Video for png image.
+   */
+  VIDEO_SOURCE_RTC_IMAGE_JPEG = 7,
+  /** Video for png image.
+   */
+  VIDEO_SOURCE_RTC_IMAGE_GIF = 8,
+  /** Remote video received from network.
+   */
+  VIDEO_SOURCE_REMOTE = 9,
+  /** Video for transcoded.
+   */
+  VIDEO_SOURCE_TRANSCODED = 10,
+
+  /** Video captured by the third camera.
+   */
+  VIDEO_SOURCE_CAMERA_THIRD = 11,
+  /** Video captured by the fourth camera.
+   */
+  VIDEO_SOURCE_CAMERA_FOURTH = 12,
+  /** Video for third screen sharing.
+   */
+  VIDEO_SOURCE_SCREEN_THIRD = 13,
+  /** Video for fourth screen sharing.
+   */
+  VIDEO_SOURCE_SCREEN_FOURTH = 14,
+  /** Video for voice drive.
+   */
+  VIDEO_SOURCE_SPEECH_DRIVEN = 15,
+
+  VIDEO_SOURCE_UNKNOWN = 100
+};
+
+struct MixerLayoutConfig {
+  int32_t x;
+  int32_t y;
+  int32_t width;
+  int32_t height;
+  int32_t zOrder; // larger zOrder prioritizes smaller ones
+  float alpha;
+  bool mirror;
+  const char* image_path; // url of the place holder picture
+  int rotation; // 0: none, 1: 90°, 2: 180°, 3: 270°
+
+  MixerLayoutConfig() : x(0), y(0), width(0), height(0), zOrder(0), alpha(1.0), mirror(false), image_path(NULL),rotation(0) {}
+  MixerLayoutConfig(int ox, int oy, int w, int h, int order) : x(ox), y(oy), width(w), height(h), zOrder(order), alpha(1.0), mirror(false), image_path(NULL), rotation(0) {}
+};
+
+enum ImageType {
+  kUnknownPic,
+  kPng,
+  kJpeg,
+  kGif
+};
 
 /**
  * Audio routes.
@@ -45,46 +159,49 @@ enum AudioRoute {
    */
   ROUTE_DEFAULT = -1,
   /**
-   * The headset.
+   * The Headset.
    */
-  ROUTE_HEADSET,
+  ROUTE_HEADSET = 0,
   /**
-   * The earpiece.
+   * The Earpiece.
    */
-  ROUTE_EARPIECE,
+  ROUTE_EARPIECE = 1,
   /**
-   * The headset with no microphone.
+   * The Headset with no microphone.
    */
-  ROUTE_HEADSETNOMIC,
+  ROUTE_HEADSETNOMIC = 2,
   /**
-   * The speakerphone.
+   * The Speakerphone.
    */
-  ROUTE_SPEAKERPHONE,
+  ROUTE_SPEAKERPHONE = 3,
   /**
-   * The loudspeaker.
+   * The Loudspeaker.
    */
-  ROUTE_LOUDSPEAKER,
+  ROUTE_LOUDSPEAKER = 4,
   /**
-   * The Bluetooth headset.
+   * The Bluetooth Device via HFP.
    */
-  ROUTE_HEADSETBLUETOOTH,
+  ROUTE_BLUETOOTH_DEVICE_HFP = 5,
   /**
-   * The HDMI
+   * The USB.
    */
-  ROUTE_HDMI,
+  ROUTE_USB = 6,
   /**
-   * The USB
+   * The HDMI.
    */
-  ROUTE_USB
-};
-
-enum NLP_AGGRESSIVENESS {
-  NLP_NOT_SPECIFIED = 0,
-  NLP_MILD = 1,
-  NLP_NORMAL = 2,
-  NLP_AGGRESSIVE = 3,
-  NLP_SUPER_AGGRESSIVE = 4,
-  NLP_EXTREME = 5,
+  ROUTE_HDMI = 7,
+  /**
+   * The DisplayPort.
+   */
+  ROUTE_DISPLAYPORT = 8,
+  /**
+   * The AirPlay.
+   */
+  ROUTE_AIRPLAY = 9,
+  /**
+   * The Bluetooth Device via A2DP.
+   */
+  ROUTE_BLUETOOTH_DEVICE_A2DP = 10,
 };
 
 /**
@@ -102,22 +219,21 @@ struct AudioParameters {
   size_t channels;
   size_t frames_per_buffer;
 
-  AudioParameters()
-      : sample_rate(0),
-        channels(0),
-        frames_per_buffer(0) {}
+  AudioParameters() : sample_rate(0), channels(0), frames_per_buffer(0) {}
 };
 
+/**
+ * The use mode of the audio data.
+ */
 enum RAW_AUDIO_FRAME_OP_MODE_TYPE {
-  /** 0: Read-only mode: Users only read the
-     agora::media::IAudioFrameObserver::AudioFrame data without modifying
-     anything. For example, when users acquire data with the Agora SDK then push
-     the RTMP streams. */
+  /** 0: Read-only mode: Users only read the data from `AudioFrame` without modifying anything.
+   * For example, when users acquire the data with the Agora SDK, then start the media push.
+   */
   RAW_AUDIO_FRAME_OP_MODE_READ_ONLY = 0,
 
-  /** 2: Read and write mode: Users read the data from AudioFrame, modify it,
-     and then play it. For example, when users have their own sound-effect
-     processing module and do some voice pre-processing such as a voice change.
+  /** 2: Read and write mode: Users read the data from `AudioFrame`, modify it, and then play it.
+   * For example, when users have their own audio-effect processing module and perform some voice
+   * pre-processing, such as a voice change.
    */
   RAW_AUDIO_FRAME_OP_MODE_READ_WRITE = 2,
 };
@@ -125,7 +241,7 @@ enum RAW_AUDIO_FRAME_OP_MODE_TYPE {
 }  // namespace rtc
 
 namespace media {
-  /**
+/**
  * The type of media device.
  */
 enum MEDIA_SOURCE_TYPE {
@@ -182,6 +298,10 @@ enum MEDIA_SOURCE_TYPE {
    */
   TRANSCODED_VIDEO_SOURCE = 12,
   /**
+   * 13: Video for voice drive.
+   */
+  SPEECH_DRIVEN_VIDEO_SOURCE = 13,
+  /**
    * 100: Internal Usage only.
    */
   UNKNOWN_MEDIA_SOURCE = 100
@@ -194,70 +314,49 @@ enum CONTENT_INSPECT_RESULT {
   CONTENT_INSPECT_SEXY = 2,
   CONTENT_INSPECT_PORN = 3,
 };
-enum CONTENT_INSPECT_VENDOR { CONTENT_INSPECT_VENDOR_AGORA = 1, CONTENT_INSPECT_VENDOR_TUPU = 2, CONTENT_INSPECT_VENDOR_HIVE = 3 };
-enum CONTENT_INSPECT_DEVICE_TYPE{
-    CONTENT_INSPECT_DEVICE_INVALID = 0,
-    CONTENT_INSPECT_DEVICE_AGORA = 1
-};
+
 enum CONTENT_INSPECT_TYPE {
 /**
  * (Default) content inspect type invalid
  */
 CONTENT_INSPECT_INVALID = 0,
 /**
+ * @deprecated
  * Content inspect type moderation
  */
-CONTENT_INSPECT_MODERATION = 1,
+CONTENT_INSPECT_MODERATION __deprecated = 1,
 /**
  * Content inspect type supervise
  */
-CONTENT_INSPECT_SUPERVISION = 2
+CONTENT_INSPECT_SUPERVISION = 2,
+/**
+ * Content inspect type image moderation
+ */
+CONTENT_INSPECT_IMAGE_MODERATION = 3
 };
 
-enum CONTENT_INSPECT_WORK_TYPE {
-/**
- * video moderation on device
- */
-CONTENT_INSPECT_WORK_DEVICE = 0,
-/**
- * video moderation on cloud
- */
-CONTENT_INSPECT_WORK_CLOUD = 1,
-/**
- * video moderation on cloud and device
- */
-CONTENT_INSPECT_WORK_DEVICE_CLOUD = 2
-};
 struct ContentInspectModule {
   /**
    * The content inspect module type.
    */
   CONTENT_INSPECT_TYPE type;
-  CONTENT_INSPECT_VENDOR vendor;
-  const char* callbackUrl;
-  const char* token;
   /**The content inspect frequency, default is 0 second.
    * the frequency <= 0 is invalid.
    */
-  unsigned int frequency;
+  unsigned int interval;
   ContentInspectModule() {
     type = CONTENT_INSPECT_INVALID;
-    frequency = 0;
-    vendor = CONTENT_INSPECT_VENDOR_AGORA;
-    callbackUrl = NULL;
-    token = NULL;
+    interval = 0;
   }
 };
 /** Definition of ContentInspectConfig.
  */
 struct ContentInspectConfig {
-  /** video moderation work type.*/
-  CONTENT_INSPECT_WORK_TYPE ContentWorkType;
-
-  /**the type of video moderation on device.*/
-  CONTENT_INSPECT_DEVICE_TYPE DeviceworkType;
   const char* extraInfo;
-
+  /**
+   * The specific server configuration for image moderation. Please contact technical support.
+   */
+  const char* serverConfig;
   /**The content inspect modules, max length of modules is 32.
    * the content(snapshot of send video stream, image) can be used to max of 32 types functions.
    */
@@ -267,14 +366,13 @@ struct ContentInspectConfig {
   int moduleCount;
    ContentInspectConfig& operator=(const ContentInspectConfig& rth)
 	{
-        ContentWorkType = rth.ContentWorkType;
-        DeviceworkType = rth.DeviceworkType;
         extraInfo = rth.extraInfo;
+        serverConfig = rth.serverConfig;
         moduleCount = rth.moduleCount;
 		memcpy(&modules, &rth.modules,  MAX_CONTENT_INSPECT_MODULE_COUNT * sizeof(ContentInspectModule));
 		return *this;
 	}
-  ContentInspectConfig() :ContentWorkType(CONTENT_INSPECT_WORK_CLOUD),DeviceworkType(CONTENT_INSPECT_DEVICE_INVALID),extraInfo(NULL), moduleCount(0){}
+  ContentInspectConfig() :extraInfo(NULL), serverConfig(NULL), moduleCount(0){}
 };
 
 namespace base {
@@ -284,13 +382,6 @@ typedef void* view_t;
 typedef const char* user_id_t;
 
 static const uint8_t kMaxCodecNameLength = 50;
-
-/**
-  * The maximum metadata size.
-  */
-enum MAX_METADATA_SIZE_TYPE {
-  MAX_METADATA_SIZE_IN_BYTE = 1024
-};
 
 /**
  * The definition of the PacketOptions struct, which contains infomation of the packet
@@ -303,19 +394,7 @@ struct PacketOptions {
   uint32_t timestamp;
   // Audio level indication.
   uint8_t audioLevelIndication;
-  PacketOptions()
-      : timestamp(0),
-        audioLevelIndication(127) {}
-};
-
-enum AUDIO_PROCESSING_CHANNELS {
-  AUDIO_PROCESSING_MONO = 1,
-  AUDIO_PROCESSING_STEREO = 2,
-};
-
-struct AdvancedAudioOptions {
-  AUDIO_PROCESSING_CHANNELS audioProcessingChannels;
-  AdvancedAudioOptions(): audioProcessingChannels(AUDIO_PROCESSING_MONO) {}
+  PacketOptions() : timestamp(0), audioLevelIndication(127) {}
 };
 
 /**
@@ -331,9 +410,7 @@ struct AudioEncodedFrameInfo {
    * The codec of the packet.
    */
   uint8_t codec;
-  AudioEncodedFrameInfo()
-      : sendTs(0),
-        codec(0) {}
+  AudioEncodedFrameInfo() : sendTs(0), codec(0) {}
 };
 
 /**
@@ -343,22 +420,23 @@ struct AudioPcmFrame {
   /**
    * The buffer size of the PCM audio frame.
    */
-  OPTIONAL_ENUM_SIZE_T {
-    // Stereo, 32 kHz, 60 ms (2 * 32 * 60)
-    /**
-     * The max number of the samples of the data.
-     *
-     * When the number of audio channel is two, the sample rate is 32 kHZ,
-     * the buffer length of the data is 60 ms, the number of the samples of the data is 3840 (2 x 32 x 60).
-     */
-    kMaxDataSizeSamples = 3840,
-    /** The max number of the bytes of the data. */
-    kMaxDataSizeBytes = kMaxDataSizeSamples * sizeof(int16_t),
+  OPTIONAL_ENUM_SIZE_T{
+      // Stereo, 32 kHz, 60 ms (2 * 32 * 60)
+      /**
+       * The max number of the samples of the data.
+       *
+       * When the number of audio channel is two, the sample rate is 32 kHZ,
+       * the buffer length of the data is 60 ms, the number of the samples of the data is 3840 (2 x
+       * 32 x 60).
+       */
+      kMaxDataSizeSamples = 3840,
+      /** The max number of the bytes of the data. */
+      kMaxDataSizeBytes = kMaxDataSizeSamples * sizeof(int16_t),
   };
 
   /** The timestamp (ms) of the audio frame.
    */
-  uint32_t capture_timestamp;
+  int64_t capture_timestamp;
   /** The number of samples per channel.
    */
   size_t samples_per_channel_;
@@ -373,24 +451,47 @@ struct AudioPcmFrame {
   rtc::BYTES_PER_SAMPLE bytes_per_sample;
   /** The audio frame data. */
   int16_t data_[kMaxDataSizeSamples];
+  
+  /** 
+   *  @technical preview
+   *  data_[kMaxDataSizeSamples] is real stereo data 
+   */
+  bool is_stereo_;
+    
+  /** Audio Frame Label.
+  */
+  struct AudioLabel {
+    int far_filed_flag;
+    int rms;
+    int voice_prob;
+    int music_prob;
+    int pitch;
+  } audio_label_;
 
   AudioPcmFrame& operator=(const AudioPcmFrame& src) {
-    if(this == &src) {
+    if (this == &src) {
       return *this;
     }
 
-    this->capture_timestamp = src.capture_timestamp;
-    this->samples_per_channel_ = src.samples_per_channel_;
-    this->sample_rate_hz_ = src.sample_rate_hz_;
-    this->bytes_per_sample = src.bytes_per_sample;
-    this->num_channels_ = src.num_channels_;
+    capture_timestamp = src.capture_timestamp;
+    samples_per_channel_ = src.samples_per_channel_;
+    sample_rate_hz_ = src.sample_rate_hz_;
+    bytes_per_sample = src.bytes_per_sample;
+    num_channels_ = src.num_channels_;
+    is_stereo_ = src.is_stereo_;
+    audio_label_.far_filed_flag = src.audio_label_.far_filed_flag;
+    audio_label_.rms = src.audio_label_.rms;
+    audio_label_.voice_prob = src.audio_label_.voice_prob;
+    audio_label_.music_prob = src.audio_label_.music_prob;
+    audio_label_.pitch = src.audio_label_.pitch;
+      
 
     size_t length = src.samples_per_channel_ * src.num_channels_;
     if (length > kMaxDataSizeSamples) {
       length = kMaxDataSizeSamples;
     }
 
-    memcpy(this->data_, src.data_, length * sizeof(int16_t));
+    memcpy(data_, src.data_, length * sizeof(int16_t));
 
     return *this;
   }
@@ -400,7 +501,13 @@ struct AudioPcmFrame {
         samples_per_channel_(0),
         sample_rate_hz_(0),
         num_channels_(0),
-        bytes_per_sample(rtc::TWO_BYTES_PER_SAMPLE) {
+        bytes_per_sample(rtc::TWO_BYTES_PER_SAMPLE),
+        is_stereo_(false) {
+    audio_label_.far_filed_flag = -1;
+    audio_label_.rms = -1;
+    audio_label_.voice_prob = -1;
+    audio_label_.music_prob = -1;
+    audio_label_.pitch = -1;
     memset(data_, 0, sizeof(data_));
   }
 
@@ -409,12 +516,17 @@ struct AudioPcmFrame {
         samples_per_channel_(src.samples_per_channel_),
         sample_rate_hz_(src.sample_rate_hz_),
         num_channels_(src.num_channels_),
-        bytes_per_sample(src.bytes_per_sample) {
+        bytes_per_sample(src.bytes_per_sample),
+        is_stereo_(src.is_stereo_) {
     size_t length = src.samples_per_channel_ * src.num_channels_;
     if (length > kMaxDataSizeSamples) {
       length = kMaxDataSizeSamples;
     }
-
+    audio_label_.far_filed_flag = src.audio_label_.far_filed_flag;
+    audio_label_.rms = src.audio_label_.rms;
+    audio_label_.voice_prob = src.audio_label_.voice_prob;
+    audio_label_.music_prob = src.audio_label_.music_prob;
+    audio_label_.pitch = src.audio_label_.pitch;
     memcpy(this->data_, src.data_, length * sizeof(int16_t));
   }
 };
@@ -430,20 +542,6 @@ enum AUDIO_DUAL_MONO_MODE {
   AUDIO_DUAL_MONO_R = 2,
   /**< ChanLout=ChanRout=(ChanLin+ChanRin)/2 */
   AUDIO_DUAL_MONO_MIX = 3
-};
-
-class IAudioFrameObserver {
- public:
-  /**
-   * Occurs when each time the player receives an audio frame.
-   *
-   * After registering the audio frame observer,
-   * the callback occurs when each time the player receives an audio frame,
-   * reporting the detailed information of the audio frame.
-   * @param frame The detailed information of the audio frame. See {@link AudioPcmFrame}.
-   */
-  virtual void onFrame(AudioPcmFrame* frame) = 0;
-  virtual ~IAudioFrameObserver() {}
 };
 
 /**
@@ -482,10 +580,36 @@ enum VIDEO_PIXEL_FORMAT {
    * 11: GL_TEXTURE_OES
    */
   VIDEO_TEXTURE_OES = 11,
+  /*
+  12: pixel format for iOS CVPixelBuffer NV12
+  */
+  VIDEO_CVPIXEL_NV12 = 12,
+  /*
+  13: pixel format for iOS CVPixelBuffer I420
+  */
+  VIDEO_CVPIXEL_I420 = 13,
+  /*
+  14: pixel format for iOS CVPixelBuffer BGRA
+  */
+  VIDEO_CVPIXEL_BGRA = 14,
+  /**
+  15: pixel format for iOS CVPixelBuffer P010(10bit NV12)
+  */
+  VIDEO_CVPIXEL_P010 = 15,
   /**
    * 16: I422.
    */
   VIDEO_PIXEL_I422 = 16,
+  /**
+   * 17: ID3D11Texture2D, only support DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_B8G8R8A8_TYPELESS,
+   * DXGI_FORMAT_NV12 texture format
+   */
+  VIDEO_TEXTURE_ID3D11TEXTURE2D = 17,
+  /**
+   * 18: I010. 10bit I420 data.
+   * @technical preview
+   */
+  VIDEO_PIXEL_I010 = 18,
 };
 
 /**
@@ -509,6 +633,222 @@ enum RENDER_MODE_TYPE {
    */
   RENDER_MODE_ADAPTIVE __deprecated = 3,
 };
+
+/**
+ * The camera video source type
+ */
+enum CAMERA_VIDEO_SOURCE_TYPE {
+  /**
+   * 0: the video frame comes from the front camera
+   */
+  CAMERA_SOURCE_FRONT = 0,
+  /**
+   * 1: the video frame comes from the back camera
+   */
+  CAMERA_SOURCE_BACK = 1,
+  /**
+   * 1: the video frame source is unsepcified
+   */
+  VIDEO_SOURCE_UNSPECIFIED = 2,
+};
+
+/**
+ * The IVideoFrameMetaInfo class.
+ * This interface provides access to metadata information.
+ */
+class IVideoFrameMetaInfo {
+ public:
+  enum META_INFO_KEY {
+    KEY_FACE_CAPTURE = 0,
+  };
+  virtual ~IVideoFrameMetaInfo(){};
+  virtual const char* getMetaInfoStr(META_INFO_KEY key) const = 0;
+};
+
+struct ColorSpace {
+  enum PrimaryID {
+    // The indices are equal to the values specified in T-REC H.273 Table 2.
+    PRIMARYID_BT709 = 1,
+    PRIMARYID_UNSPECIFIED = 2,
+    PRIMARYID_BT470M = 4,
+    PRIMARYID_BT470BG = 5,
+    PRIMARYID_SMPTE170M = 6,  // Identical to BT601
+    PRIMARYID_SMPTE240M = 7,
+    PRIMARYID_FILM = 8,
+    PRIMARYID_BT2020 = 9,
+    PRIMARYID_SMPTEST428 = 10,
+    PRIMARYID_SMPTEST431 = 11,
+    PRIMARYID_SMPTEST432 = 12,
+    PRIMARYID_JEDECP22 = 22,  // Identical to EBU3213-E
+  };
+
+  enum RangeID {
+    // The indices are equal to the values specified at
+    // https://www.webmproject.org/docs/container/#colour for the element Range.
+    RANGEID_INVALID = 0,
+    // Limited Rec. 709 color range with RGB values ranging from 16 to 235.
+    RANGEID_LIMITED = 1,
+    // Full RGB color range with RGB valees from 0 to 255.
+    RANGEID_FULL = 2,
+    // Range is defined by MatrixCoefficients/TransferCharacteristics.
+    RANGEID_DERIVED = 3,
+  };
+
+  enum MatrixID {
+    // The indices are equal to the values specified in T-REC H.273 Table 4.
+    MATRIXID_RGB = 0,
+    MATRIXID_BT709 = 1,
+    MATRIXID_UNSPECIFIED = 2,
+    MATRIXID_FCC = 4,
+    MATRIXID_BT470BG = 5,
+    MATRIXID_SMPTE170M = 6,
+    MATRIXID_SMPTE240M = 7,
+    MATRIXID_YCOCG = 8,
+    MATRIXID_BT2020_NCL = 9,
+    MATRIXID_BT2020_CL = 10,
+    MATRIXID_SMPTE2085 = 11,
+    MATRIXID_CDNCLS = 12,
+    MATRIXID_CDCLS = 13,
+    MATRIXID_BT2100_ICTCP = 14,
+  };
+
+  enum TransferID {
+    // The indices are equal to the values specified in T-REC H.273 Table 3.
+    TRANSFERID_BT709 = 1,
+    TRANSFERID_UNSPECIFIED = 2,
+    TRANSFERID_GAMMA22 = 4,
+    TRANSFERID_GAMMA28 = 5,
+    TRANSFERID_SMPTE170M = 6,
+    TRANSFERID_SMPTE240M = 7,
+    TRANSFERID_LINEAR = 8,
+    TRANSFERID_LOG = 9,
+    TRANSFERID_LOG_SQRT = 10,
+    TRANSFERID_IEC61966_2_4 = 11,
+    TRANSFERID_BT1361_ECG = 12,
+    TRANSFERID_IEC61966_2_1 = 13,
+    TRANSFERID_BT2020_10 = 14,
+    TRANSFERID_BT2020_12 = 15,
+    TRANSFERID_SMPTEST2084 = 16,
+    TRANSFERID_SMPTEST428 = 17,
+    TRANSFERID_ARIB_STD_B67 = 18,
+  };
+
+  PrimaryID primaries;
+  TransferID transfer;
+  MatrixID matrix;
+  RangeID range;
+
+  ColorSpace()
+      : primaries(PRIMARYID_UNSPECIFIED), transfer(TRANSFERID_UNSPECIFIED),
+        matrix(MATRIXID_UNSPECIFIED), range(RANGEID_INVALID) {}
+
+  bool validate() const {
+    return primaries != PRIMARYID_UNSPECIFIED || transfer != TRANSFERID_UNSPECIFIED ||
+           matrix != MATRIXID_UNSPECIFIED ||
+           range != RANGEID_INVALID;
+  }
+};
+
+/**
+ * The definition of the Hdr10MetadataInfo struct.
+ */
+struct Hdr10MetadataInfo {
+   /**
+   * The x coordinates of the red value in the CIE1931 color space. The values need to normalized to 50,000.
+   */
+  uint16_t redPrimaryX;
+   /**
+   * The y coordinates of the red value in the CIE1931 color space. The values need to normalized to 50,000.
+   */
+  uint16_t redPrimaryY;
+   /**
+   * The x coordinates of the green value in the CIE1931 color space. The values need to normalized to 50,000.
+   */
+  uint16_t greenPrimaryX;
+   /**
+   * The y coordinates of the green value in the CIE1931 color space. The values need to normalized to 50,000.
+   */
+  uint16_t greenPrimaryY;
+   /**
+   * The x coordinates of the blue value in the CIE1931 color space. The values need to normalized to 50,000.
+   */
+  uint16_t bluePrimaryX;
+   /**
+   * The y coordinates of the blue value in the CIE1931 color space. The values need to normalized to 50,000.
+   */
+  uint16_t bluePrimaryY;
+   /**
+   * The x coordinates of the white point in the CIE1931 color space.The values need to normalized to 50,000.
+   */
+  uint16_t whitePointX;
+   /**
+   * The y coordinates of the white point in the CIE1931 color space.The values need to normalized to 50,000.
+   */
+  uint16_t whitePointY;
+   /**
+   * The maximum number of nits of the display used to master the content. The values need to normalized to 10,000.
+   */
+  unsigned int maxMasteringLuminance;
+   /**
+   * The minimum number of nits of the display used to master the content. The values need to normalized to 10,000.
+   */
+  unsigned int minMasteringLuminance;
+   /**
+   * The maximum content light level (MaxCLL). This is the nit value corresponding to the brightest pixel used anywhere in the content.
+   */
+  uint16_t maxContentLightLevel;
+   /**
+   * The maximum frame average light level (MaxFALL). This is the nit value corresponding to the average luminance of the frame which has the brightest average luminance anywhere in the content.
+   */
+  uint16_t maxFrameAverageLightLevel;
+
+  Hdr10MetadataInfo()
+      : redPrimaryX(0),
+        redPrimaryY(0),
+        greenPrimaryX(0),
+        greenPrimaryY(0),
+        bluePrimaryX(0),
+        bluePrimaryY(0),
+        whitePointX(0),
+        whitePointY(0),
+        maxMasteringLuminance(0),
+        minMasteringLuminance(0),
+        maxContentLightLevel(0),
+        maxFrameAverageLightLevel(0){}
+
+  bool validate() const {
+    return maxContentLightLevel <= 20000 &&
+           maxFrameAverageLightLevel <= 20000;
+  }
+};
+
+/**
+ *  The relative position between alphabuffer and the frame.
+ */
+enum ALPHA_STITCH_MODE {
+  /**
+   * 0: Normal frame without alphabuffer stitched
+   */
+  NO_ALPHA_STITCH = 0,
+  /**
+   * 1: Alphabuffer is above the frame
+   */
+  ALPHA_STITCH_UP = 1,
+  /**
+   * 2: Alphabuffer is below the frame
+   */
+  ALPHA_STITCH_BELOW = 2,
+  /**
+   * 3: Alphabuffer is on the left of frame
+   */
+  ALPHA_STITCH_LEFT = 3,
+  /**
+   * 4: Alphabuffer is on the right of frame
+   */
+  ALPHA_STITCH_RIGHT = 4,
+};
+
+
 /**
  * The definition of the ExternalVideoFrame struct.
  */
@@ -528,10 +868,16 @@ struct ExternalVideoFrame {
         eglContext(NULL),
         eglType(EGL_CONTEXT10),
         textureId(0),
-        metadata_buffer(NULL),
-        metadata_size(0){}
+        fenceObject(0),
+        metadataBuffer(NULL),
+        metadataSize(0),
+        alphaBuffer(NULL),
+        fillAlphaBuffer(false),
+        alphaStitchMode(NO_ALPHA_STITCH),
+        d3d11Texture2d(NULL),
+        textureSliceIndex(0){}
 
-   /**
+  /**
    * The EGL context type.
    */
   enum EGL_CONTEXT_TYPE {
@@ -605,32 +951,39 @@ struct ExternalVideoFrame {
    */
   int cropBottom;
   /**
-   * [Raw data related parameter] The clockwise rotation information of the video frame. You can set the
-   * rotation angle as 0, 90, 180, or 270. The default value is 0.
+   * [Raw data related parameter] The clockwise rotation information of the video frame. You can set
+   * the rotation angle as 0, 90, 180, or 270. The default value is 0.
    */
   int rotation;
   /**
-   * The timestamp (ms) of the incoming video frame. An incorrect timestamp results in a frame loss or
-   * unsynchronized audio and video.
-   * 
+   * The timestamp (ms) of the incoming video frame. An incorrect timestamp results in a frame loss
+   * or unsynchronized audio and video.
+   *
    * Please refer to getAgoraCurrentMonotonicTimeInMs or getCurrentMonotonicTimeInMs
    * to determine how to fill this filed.
    */
   long long timestamp;
   /**
    * [Texture-related parameter]
-   * When using the OpenGL interface (javax.microedition.khronos.egl.*) defined by Khronos, set EGLContext to this field.
-   * When using the OpenGL interface (android.opengl.*) defined by Android, set EGLContext to this field.
+   * When using the OpenGL interface (javax.microedition.khronos.egl.*) defined by Khronos, set
+   * EGLContext to this field. When using the OpenGL interface (android.opengl.*) defined by
+   * Android, set EGLContext to this field.
    */
-  void *eglContext;
+  void* eglContext;
   /**
    * [Texture related parameter] Texture ID used by the video frame.
    */
   EGL_CONTEXT_TYPE eglType;
   /**
-   * [Texture related parameter] Incoming 4 &times; 4 transformational matrix. The typical value is a unit matrix.
+   * [Texture related parameter] Incoming 4 &times; 4 transformational matrix. The typical value is
+   * a unit matrix.
    */
   int textureId;
+  /**
+   * [Texture related parameter] The fence object related to the textureId parameter, indicating the synchronization status of the video data in Texture format.
+   * The default value is 0
+   */
+  long long fenceObject; 
   /**
    * [Texture related parameter] Incoming 4 &times; 4 transformational matrix. The typical value is a unit matrix.
    */
@@ -639,12 +992,53 @@ struct ExternalVideoFrame {
    * [Texture related parameter] The MetaData buffer.
    *  The default value is NULL
    */
-  uint8_t* metadata_buffer;
+  uint8_t* metadataBuffer;
   /**
    * [Texture related parameter] The MetaData size.
    *  The default value is 0
    */
-  int metadata_size;
+  int metadataSize;
+  /**
+   *  Indicates the alpha channel of current frame, which is consistent with the dimension of the video frame.
+   *  The value range of each pixel is [0,255], where 0 represents the background; 255 represents the foreground.
+   *  The default value is NULL.
+   */
+  uint8_t* alphaBuffer;
+  /**
+   *  [For bgra or rgba only] Extract alphaBuffer from bgra or rgba data. Set it true if you do not explicitly specify the alphabuffer.
+   *  The default value is false
+   */
+  bool fillAlphaBuffer;
+  /**
+   *  The relative position between alphabuffer and the frame.
+   *  0: Normal frame;
+   *  1: Alphabuffer is above the frame;
+   *  2: Alphabuffer is below the frame;
+   *  3: Alphabuffer is on the left of frame;
+   *  4: Alphabuffer is on the right of frame;
+   *  The default value is 0.
+   */
+  ALPHA_STITCH_MODE alphaStitchMode;
+
+  /**
+   * [For Windows only] The pointer of ID3D11Texture2D used by the video frame.
+   */
+  void *d3d11Texture2d;
+
+  /**
+   * [For Windows only] The index of ID3D11Texture2D array used by the video frame.
+   */
+  int textureSliceIndex;
+
+  /**
+   * metadata info used for hdr video data
+   */
+  Hdr10MetadataInfo hdr10MetadataInfo;
+
+   /**
+   * The ColorSpace of the video frame.
+   */
+  ColorSpace colorSpace;
 };
 
 /**
@@ -667,8 +1061,14 @@ struct VideoFrame {
   metadata_buffer(NULL),
   metadata_size(0),
   sharedContext(0),
-  textureId(0){}
-
+  textureId(0),
+  d3d11Texture2d(NULL),
+  alphaBuffer(NULL),
+  alphaStitchMode(NO_ALPHA_STITCH),
+  pixelBuffer(NULL),
+  metaInfo(NULL){
+    memset(matrix, 0, sizeof(matrix));
+  }
   /**
    * The video pixel format: #VIDEO_PIXEL_FORMAT.
    */
@@ -710,8 +1110,8 @@ struct VideoFrame {
    */
   int rotation;
   /**
-   * The timestamp to render the video stream. Use this parameter for audio-video synchronization when
-   * rendering the video.
+   * The timestamp to render the video stream. Use this parameter for audio-video synchronization
+   * when rendering the video.
    *
    * @note This parameter is for rendering the video, not capturing the video.
    */
@@ -739,18 +1139,62 @@ struct VideoFrame {
    */
   int textureId;
   /**
+   * [Texture related parameter] The pointer of ID3D11Texture2D used by the video frame,for Windows
+   * only.
+   */
+  void* d3d11Texture2d;
+  /**
    * [Texture related parameter], Incoming 4 &times; 4 transformational matrix.
    */
   float matrix[16];
+  /**
+   *  Indicates the alpha channel of current frame, which is consistent with the dimension of the video frame.
+   *  The value range of each pixel is [0,255], where 0 represents the background; 255 represents the foreground.
+   *  The default value is NULL.
+   */
+  uint8_t* alphaBuffer;
+  /**
+   *  The relative position between alphabuffer and the frame.
+   *  0: Normal frame;
+   *  1: Alphabuffer is above the frame;
+   *  2: Alphabuffer is below the frame;
+   *  3: Alphabuffer is on the left of frame;
+   *  4: Alphabuffer is on the right of frame;
+   *  The default value is 0.
+   */
+  ALPHA_STITCH_MODE alphaStitchMode;
+  /**
+   *The type of CVPixelBufferRef, for iOS and macOS only.
+   */
+  void* pixelBuffer;
+  /**
+   *  The pointer to IVideoFrameMetaInfo, which is the interface to get metainfo contents from
+   * VideoFrame.
+   */
+  IVideoFrameMetaInfo* metaInfo;
+
+  /**
+   * metadata info used for hdr video data
+   */
+  Hdr10MetadataInfo hdr10MetadataInfo;
+
+  /**
+   * The ColorSpace of the video frame
+   */
+  ColorSpace colorSpace;
 };
 
+/**
+ * The IVideoFrameObserver class.
+ */
 class IVideoFrameObserver {
  public:
   /**
    * Occurs each time the player receives a video frame.
    *
    * After registering the video frame observer,
-   * the callback occurs each time the player receives a video frame to report the detailed information of the video frame.
+   * the callback occurs each time the player receives a video frame to report the detailed
+   * information of the video frame.
    * @param frame The detailed information of the video frame. See {@link VideoFrame}.
    */
   virtual void onFrame(const VideoFrame* frame) = 0;
@@ -783,10 +1227,51 @@ enum VIDEO_MODULE_POSITION {
   POSITION_POST_CAPTURER = 1 << 0,
   POSITION_PRE_RENDERER = 1 << 1,
   POSITION_PRE_ENCODER = 1 << 2,
-  POSITION_POST_FILTERS = 1 << 3,
+  POSITION_POST_CAPTURER_ORIGIN = 1 << 3,
 };
 
 }  // namespace base
+
+/** Definition of SnapshotConfig.
+ */
+struct SnapshotConfig {
+  /** 
+   * The local path (including filename extensions) of the snapshot. For example:
+   * - Windows: `C:\Users\<user_name>\AppData\Local\Agora\<process_name>\example.jpg`
+   * - iOS: `/App Sandbox/Library/Caches/example.jpg`
+   * - macOS: `～/Library/Logs/example.jpg`
+   * - Android: `/storage/emulated/0/Android/data/<package name>/files/example.jpg`
+   */
+  const char* filePath;
+
+  /** 
+   * The position of the video observation. See VIDEO_MODULE_POSITION.
+   * 
+   * Allowed values vary depending on the `uid` parameter passed in `takeSnapshot` or `takeSnapshotEx`:
+   * - uid = 0: Position 2, 4 and 8 are allowed.
+   * - uid != 0: Only position 2 is allowed.
+   * 
+   */
+  media::base::VIDEO_MODULE_POSITION position;
+  SnapshotConfig() :filePath(NULL), position(media::base::POSITION_PRE_ENCODER) {}
+};
+
+/**
+ * The audio frame observer.
+ */
+class IAudioPcmFrameSink {
+ public:
+  /**
+   * Occurs when each time the player receives an audio frame.
+   *
+   * After registering the audio frame observer,
+   * the callback occurs when each time the player receives an audio frame,
+   * reporting the detailed information of the audio frame.
+   * @param frame The detailed information of the audio frame. See {@link AudioPcmFrame}.
+   */
+  virtual void onFrame(agora::media::base::AudioPcmFrame* frame) = 0;
+  virtual ~IAudioPcmFrameSink() {}
+};
 
 /**
  * The IAudioFrameObserverBase class.
@@ -802,6 +1287,7 @@ class IAudioFrameObserverBase {
      */
     FRAME_TYPE_PCM16 = 0,
   };
+  enum { MAX_HANDLE_TIME_CNT = 10 };
   /**
    * The definition of the AudioFrame struct.
    */
@@ -820,31 +1306,58 @@ class IAudioFrameObserverBase {
     agora::rtc::BYTES_PER_SAMPLE bytesPerSample;
     /**
      * The number of audio channels (data is interleaved, if stereo).
+     * - 1: Mono.
+     * - 2: Stereo.
      */
     int channels;
     /**
-     * The sample rate of the audio frame.
+     * The sample rate
      */
     int samplesPerSec;
     /**
-     * The pointer to the audio data buffer.
+     * The data buffer of the audio frame. When the audio frame uses a stereo channel, the data
+     * buffer is interleaved.
+     *
+     * Buffer data size: buffer = samplesPerChannel × channels × bytesPerSample.
      */
     void* buffer;
     /**
-     * The timestamp to render the audio data. Use this member for audio-video synchronization when
-     * rendering the audio.
+     * The timestamp to render the audio data.
      *
-     * @note
-     * This parameter is the timestamp for audio rendering. Set it as 0.
+     * You can use this timestamp to restore the order of the captured audio frame, and synchronize
+     * audio and video frames in video scenarios, including scenarios where external video sources
+     * are used.
      */
     int64_t renderTimeMs;
-
     /**
-     * The custom-destined capture time for av sync.
+     * A reserved parameter.
+     *
+     * You can use this presentationMs parameter to indicate the presenation milisecond timestamp,
+     * this will then filled into audio4 extension part, the remote side could use this pts in av
+     * sync process with video frame.
      */
-    int64_t captureTimeMs;
-
     int avsync_type;
+    /**
+     * The pts timestamp of this audio frame.
+     *
+     * This timestamp is used to indicate the origin pts time of the frame, and sync with video
+     * frame by the pts time stamp
+     */
+    int64_t presentationMs;
+    /**
+     * The number of the audio track.
+     */
+    int audioTrackNumber;
+    /**
+     * RTP timestamp of the first sample in the audio frame
+     */
+    uint32_t rtpTimestamp;
+
+    int far_filed_flag;
+    int rms;
+    int voice_prob;
+    int music_prob;
+    int pitch;
 
     AudioFrame() : type(FRAME_TYPE_PCM16),
                    samplesPerChannel(0),
@@ -853,8 +1366,74 @@ class IAudioFrameObserverBase {
                    samplesPerSec(0),
                    buffer(NULL),
                    renderTimeMs(0),
-                   captureTimeMs(0),
-                   avsync_type(0) {}
+                   avsync_type(0),
+                   presentationMs(0),
+                   audioTrackNumber(0),
+                   rtpTimestamp(0),
+                   far_filed_flag(0),
+                   rms(0),
+                   voice_prob(0),
+                   music_prob(0),
+                   pitch(0) {}
+  };
+
+  enum AUDIO_FRAME_POSITION {
+    AUDIO_FRAME_POSITION_NONE = 0x0000,
+    /** The position for observing the playback audio of all remote users after mixing
+     */
+    AUDIO_FRAME_POSITION_PLAYBACK = 0x0001,
+    /** The position for observing the recorded audio of the local user
+     */
+    AUDIO_FRAME_POSITION_RECORD = 0x0002,
+    /** The position for observing the mixed audio of the local user and all remote users
+     */
+    AUDIO_FRAME_POSITION_MIXED = 0x0004,
+    /** The position for observing the audio of a single remote user before mixing
+     */
+    AUDIO_FRAME_POSITION_BEFORE_MIXING = 0x0008,
+    /** The position for observing the ear monitoring audio of the local user
+     */
+    AUDIO_FRAME_POSITION_EAR_MONITORING = 0x0010,
+  };
+
+  struct AudioParams {
+    /** The audio sample rate (Hz), which can be set as one of the following values:
+
+     - `8000`
+     - `16000` (Default)
+     - `32000`
+     - `44100 `
+     - `48000`
+     */
+    int sample_rate;
+
+    /* The number of audio channels, which can be set as either of the following values:
+
+     - `1`: Mono (Default)
+     - `2`: Stereo
+     */
+    int channels;
+
+    /* The use mode of the audio data. See AgoraAudioRawFrameOperationMode.
+     */
+    rtc::RAW_AUDIO_FRAME_OP_MODE_TYPE mode;
+
+    /** The number of samples. For example, set it as 1024 for RTMP or RTMPS
+     streaming.
+     */
+    int samples_per_call;
+
+    AudioParams()
+        : sample_rate(0),
+          channels(0),
+          mode(rtc::RAW_AUDIO_FRAME_OP_MODE_READ_ONLY),
+          samples_per_call(0) {}
+    AudioParams(int samplerate, int channel, rtc::RAW_AUDIO_FRAME_OP_MODE_TYPE type,
+                int samplesPerCall)
+        : sample_rate(samplerate),
+          channels(channel),
+          mode(type),
+          samples_per_call(samplesPerCall) {}
   };
 
  public:
@@ -904,12 +1483,86 @@ class IAudioFrameObserverBase {
    * - true: The before-mixing playback audio frame is valid and is encoded and sent.
    * - false: The before-mixing playback audio frame is invalid and is not encoded or sent.
    */
-  virtual bool onPlaybackAudioFrameBeforeMixing(const char* channelId, base::user_id_t userId, AudioFrame& audioFrame) {
-    (void) channelId;
-    (void) userId;
-    (void) audioFrame;
+  virtual bool onPlaybackAudioFrameBeforeMixing(const char* channelId, base::user_id_t userId,
+                                                AudioFrame& audioFrame) {
+    (void)channelId;
+    (void)userId;
+    (void)audioFrame;
     return true;
   }
+
+  /**
+   * Sets the frame position for the audio observer.
+   * @return A bit mask that controls the frame position of the audio observer.
+   * @note - Use '|' (the OR operator) to observe multiple frame positions.
+   * <p>
+   * After you successfully register the audio observer, the SDK triggers this callback each time it
+   * receives a audio frame. You can determine which position to observe by setting the return
+   * value. The SDK provides 4 positions for observer. Each position corresponds to a callback
+   * function:
+   * - `AUDIO_FRAME_POSITION_PLAYBACK (1 << 0)`: The position for playback audio frame is received,
+   * which corresponds to the \ref onPlaybackFrame "onPlaybackFrame" callback.
+   * - `AUDIO_FRAME_POSITION_RECORD (1 << 1)`: The position for record audio frame is received,
+   * which corresponds to the \ref onRecordFrame "onRecordFrame" callback.
+   * - `AUDIO_FRAME_POSITION_MIXED (1 << 2)`: The position for mixed audio frame is received, which
+   * corresponds to the \ref onMixedFrame "onMixedFrame" callback.
+   * - `AUDIO_FRAME_POSITION_BEFORE_MIXING (1 << 3)`: The position for playback audio frame before
+   * mixing is received, which corresponds to the \ref onPlaybackFrameBeforeMixing
+   * "onPlaybackFrameBeforeMixing" callback.
+   *  @return The bit mask that controls the audio observation positions.
+   * See AUDIO_FRAME_POSITION.
+   */
+
+  virtual int getObservedAudioFramePosition() = 0;
+
+  /** Sets the audio playback format
+   **Note**:
+
+   - The SDK calculates the sample interval according to the `AudioParams`
+   you set in the return value of this callback and triggers the
+   `onPlaybackAudioFrame` callback at the calculated sample interval.
+   Sample interval (seconds) = `samplesPerCall`/(`sampleRate` × `channel`).
+   Ensure that the value of sample interval is equal to or greater than 0.01.
+
+   @return Sets the audio format. See AgoraAudioParams.
+   */
+  virtual AudioParams getPlaybackAudioParams() = 0;
+
+  /** Sets the audio recording format
+   **Note**:
+   - The SDK calculates the sample interval according to the `AudioParams`
+   you set in the return value of this callback and triggers the
+   `onRecordAudioFrame` callback at the calculated sample interval.
+   Sample interval (seconds) = `samplesPerCall`/(`sampleRate` × `channel`).
+   Ensure that the value of sample interval is equal to or greater than 0.01.
+
+   @return Sets the audio format. See AgoraAudioParams.
+   */
+  virtual AudioParams getRecordAudioParams() = 0;
+
+  /** Sets the audio mixing format
+   **Note**:
+   - The SDK calculates the sample interval according to the `AudioParams`
+   you set in the return value of this callback and triggers the
+   `onMixedAudioFrame` callback at the calculated sample interval.
+   Sample interval (seconds) = `samplesPerCall`/(`sampleRate` × `channel`).
+   Ensure that the value of sample interval is equal to or greater than 0.01.
+
+   @return Sets the audio format. See AgoraAudioParams.
+   */
+  virtual AudioParams getMixedAudioParams() = 0;
+
+  /** Sets the ear monitoring audio format
+   **Note**:
+   - The SDK calculates the sample interval according to the `AudioParams`
+   you set in the return value of this callback and triggers the
+   `onEarMonitoringAudioFrame` callback at the calculated sample interval.
+   Sample interval (seconds) = `samplesPerCall`/(`sampleRate` × `channel`).
+   Ensure that the value of sample interval is equal to or greater than 0.01.
+
+   @return Sets the audio format. See AgoraAudioParams.
+   */
+  virtual AudioParams getEarMonitoringAudioParams() = 0;
 };
 
 /**
@@ -927,25 +1580,25 @@ class IAudioFrameObserver : public IAudioFrameObserverBase {
    * - true: The before-mixing playback audio frame is valid and is encoded and sent.
    * - false: The before-mixing playback audio frame is invalid and is not encoded or sent.
    */
-  virtual bool onPlaybackAudioFrameBeforeMixing(const char* channelId, rtc::uid_t uid, AudioFrame& audioFrame) = 0;
+  virtual bool onPlaybackAudioFrameBeforeMixing(const char* channelId, rtc::uid_t uid,
+                                                AudioFrame& audioFrame) = 0;
 };
 
 struct AudioSpectrumData {
   /**
    * The audio spectrum data of audio.
    */
-  const float *audioSpectrumData;
+  const float* audioSpectrumData;
   /**
    * The data length of audio spectrum data.
    */
   int dataLength;
 
   AudioSpectrumData() : audioSpectrumData(NULL), dataLength(0) {}
-  AudioSpectrumData(const float *data, int length) :
-    audioSpectrumData(data), dataLength(length) {}
+  AudioSpectrumData(const float* data, int length) : audioSpectrumData(data), dataLength(length) {}
 };
 
-struct UserAudioSpectrumInfo  {
+struct UserAudioSpectrumInfo {
   /**
    * User ID of the speaker.
    */
@@ -955,16 +1608,17 @@ struct UserAudioSpectrumInfo  {
    */
   struct AudioSpectrumData spectrumData;
 
-  UserAudioSpectrumInfo () : uid(0), spectrumData() {}
-  UserAudioSpectrumInfo(agora::rtc::uid_t _uid, const float *data, int length) :
-    uid(_uid) { spectrumData.audioSpectrumData = data; spectrumData.dataLength = length; }
+  UserAudioSpectrumInfo() : uid(0) {}
+
+  UserAudioSpectrumInfo(agora::rtc::uid_t uid, const float* data, int length)
+      : uid(uid), spectrumData(data, length) {}
 };
 
 /**
  * The IAudioSpectrumObserver class.
  */
 class IAudioSpectrumObserver {
-public:
+ public:
   virtual ~IAudioSpectrumObserver() {}
 
   /**
@@ -973,24 +1627,26 @@ public:
    * This callback reports the audio spectrum data of the local audio at the moment
    * in the channel.
    *
-   * You can set the time interval of this callback using \ref ILocalUser::enableAudioSpectrumMonitor "enableAudioSpectrumMonitor".
+   * You can set the time interval of this callback using \ref
+   * ILocalUser::enableAudioSpectrumMonitor "enableAudioSpectrumMonitor".
    *
    * @param data The audio spectrum data of local audio.
    * - true: Processed.
    * - false: Not processed.
    */
   virtual bool onLocalAudioSpectrum(const AudioSpectrumData& data) = 0;
-
   /**
    * Reports the audio spectrum of remote user.
    *
    * This callback reports the IDs and audio spectrum data of the loudest speakers at the moment
    * in the channel.
    *
-   * You can set the time interval of this callback using \ref ILocalUser::enableAudioSpectrumMonitor "enableAudioSpectrumMonitor".
+   * You can set the time interval of this callback using \ref
+   * ILocalUser::enableAudioSpectrumMonitor "enableAudioSpectrumMonitor".
    *
-   * @param spectrums The pointer to \ref agora::media::UserAudioSpectrumInfo "UserAudioSpectrumInfo", which is an array containing
-   * the user ID and audio spectrum data for each speaker.
+   * @param spectrums The pointer to \ref agora::media::UserAudioSpectrumInfo
+   * "UserAudioSpectrumInfo", which is an array containing the user ID and audio spectrum data for
+   * each speaker.
    * - This array contains the following members:
    *   - `uid`, which is the UID of each remote speaker
    *   - `spectrumData`, which reports the audio spectrum of each remote speaker.
@@ -998,7 +1654,8 @@ public:
    * - true: Processed.
    * - false: Not processed.
    */
-  virtual bool onRemoteAudioSpectrum(const UserAudioSpectrumInfo * spectrums, unsigned int spectrumNumber) = 0;
+  virtual bool onRemoteAudioSpectrum(const UserAudioSpectrumInfo* spectrums,
+                                     unsigned int spectrumNumber) = 0;
 };
 
 /**
@@ -1016,8 +1673,9 @@ class IVideoEncodedFrameObserver {
    * - true: Accept.
    * - false: Do not accept.
    */
-  virtual bool OnEncodedVideoFrame(rtc::uid_t uid, const uint8_t* imageBuffer, size_t length,
-                                   const rtc::EncodedVideoFrameInfo& videoEncodedFrameInfo) = 0;
+  virtual bool onEncodedVideoFrameReceived(
+      rtc::uid_t uid, const uint8_t* imageBuffer, size_t length,
+      const rtc::EncodedVideoFrameInfo& videoEncodedFrameInfo) = 0;
 
   virtual ~IVideoEncodedFrameObserver() {}
 };
@@ -1028,10 +1686,24 @@ class IVideoEncodedFrameObserver {
 class IVideoFrameObserver {
  public:
   typedef media::base::VideoFrame VideoFrame;
-
+  /**
+   * The process mode of the video frame:
+   */
   enum VIDEO_FRAME_PROCESS_MODE {
-    PROCESS_MODE_READ_ONLY, // Observer works as a pure renderer and will not modify the original frame.
-    PROCESS_MODE_READ_WRITE, // Observer works as a filter that will process the video frame and affect the following frame processing in SDK.
+    /**
+     * Read-only mode.
+     *
+     * In this mode, you do not modify the video frame. The video frame observer is a renderer.
+     */
+    PROCESS_MODE_READ_ONLY,  // Observer works as a pure renderer and will not modify the original
+                             // frame.
+    /**
+     * Read and write mode.
+     *
+     * In this mode, you modify the video frame. The video frame observer is a video filter.
+     */
+    PROCESS_MODE_READ_WRITE,  // Observer works as a filter that will process the video frame and
+                              // affect the following frame processing in SDK.
   };
 
  public:
@@ -1040,81 +1712,54 @@ class IVideoFrameObserver {
   /**
    * Occurs each time the SDK receives a video frame captured by the local camera.
    *
-   * After you successfully register the video frame observer, the SDK triggers this callback each time
-   * a video frame is received. In this callback, you can get the video data captured by the local
-   * camera. You can then pre-process the data according to your scenarios.
+   * After you successfully register the video frame observer, the SDK triggers this callback each
+   * time a video frame is received. In this callback, you can get the video data captured by the
+   * local camera. You can then pre-process the data according to your scenarios.
    *
    * After pre-processing, you can send the processed video data back to the SDK by setting the
    * `videoFrame` parameter in this callback.
    *
-   * The video data that this callback gets has not been pre-processed, without the watermark,
-   * the cropped content, the rotation, and the image enhancement.
+   * @note
+   * - If you get the video data in RGBA color encoding format, Agora does not support using this
+   * callback to send the processed data in RGBA color encoding format back to the SDK.
+   * - The video data that this callback gets has not been pre-processed, such as watermarking,
+   * cropping content, rotating, or image enhancement.
    *
    * @param videoFrame A pointer to the video frame: VideoFrame
+   * @param sourceType source type of video frame. See #VIDEO_SOURCE_TYPE.
    * @return Determines whether to ignore the current video frame if the pre-processing fails:
    * - true: Do not ignore.
    * - false: Ignore, in which case this method does not sent the current video frame to the SDK.
-  */
-  virtual bool onCaptureVideoFrame(VideoFrame& videoFrame) = 0;
+   */
+  virtual bool onCaptureVideoFrame(agora::rtc::VIDEO_SOURCE_TYPE sourceType,
+                                   VideoFrame& videoFrame) = 0;
 
   /**
    * Occurs each time the SDK receives a video frame before encoding.
    *
-   * After you successfully register the video frame observer, the SDK triggers this callback each time
-   * when it receives a video frame. In this callback, you can get the video data before encoding. You can then
-   * process the data according to your particular scenarios.
+   * After you successfully register the video frame observer, the SDK triggers this callback each
+   * time when it receives a video frame. In this callback, you can get the video data before
+   * encoding. You can then process the data according to your particular scenarios.
    *
    * After processing, you can send the processed video data back to the SDK by setting the
    * `videoFrame` parameter in this callback.
    *
-   * The video data that this callback gets has been pre-processed, with its content cropped, rotated, and the image enhanced.
+   * @note
+   * - To get the video data captured from the second screen before encoding, you need to set (1 <<
+   * 2) as a frame position through `getObservedFramePosition`.
+   * - The video data that this callback gets has been pre-processed, such as watermarking, cropping
+   * content, rotating, or image enhancement.
+   * - This callback does not support sending processed RGBA video data back to the SDK.
    *
    * @param videoFrame A pointer to the video frame: VideoFrame
+   * @param sourceType source type of video frame. See #VIDEO_SOURCE_TYPE.
    * @return Determines whether to ignore the current video frame if the pre-processing fails:
    * - true: Do not ignore.
    * - false: Ignore, in which case this method does not sent the current video frame to the SDK.
    */
-  virtual bool onPreEncodeVideoFrame(VideoFrame& videoFrame) = 0;
+  virtual bool onPreEncodeVideoFrame(agora::rtc::VIDEO_SOURCE_TYPE sourceType,
+                                     VideoFrame& videoFrame) = 0;
 
-  virtual bool onSecondaryCameraCaptureVideoFrame(VideoFrame& videoFrame) = 0;
-
-  /**
-   * Occurs each time the SDK receives a video frame frome secondary camera before encoding.
-   *
-   * After you successfully register the video frame observer, the SDK triggers this callback each time
-   * when it receives a video frame. In this callback, you can get the video data before encoding. You can then
-   * process the data according to your particular scenarios.
-   *
-   * After processing, you can send the processed video data back to the SDK by setting the
-   * `videoFrame` parameter in this callback.
-   *
-   * The video data that this callback gets has been pre-processed, with its content cropped, rotated, and the image enhanced.
-   *
-   * @param videoFrame A pointer to the video frame: VideoFrame
-   * @return Determines whether to ignore the current video frame if the pre-processing fails:
-   * - true: Do not ignore.
-   * - false: Ignore, in which case this method does not sent the current video frame to the SDK.
-   */
-  virtual bool onSecondaryPreEncodeCameraVideoFrame(VideoFrame& videoFrame) = 0;
-
-  /**
-   * Occurs each time the SDK receives a video frame captured by the screen.
-   *
-   * After you successfully register the video frame observer, the SDK triggers this callback each time
-   * a video frame is received. In this callback, you can get the video data captured by the screen.
-   * You can then pre-process the data according to your scenarios.
-   *
-   * After pre-processing, you can send the processed video data back to the SDK by setting the
-   * `videoFrame` parameter in this callback.
-   *
-   * @param videoFrame A pointer to the video frame: VideoFrame
-   * @return Determines whether to ignore the current video frame if the pre-processing fails:
-   * - true: Do not ignore.
-   * - false: Ignore, in which case this method does not sent the current video frame to the SDK.
-   */
-  virtual bool onScreenCaptureVideoFrame(VideoFrame& videoFrame) = 0;
-
-  virtual bool onPreEncodeScreenVideoFrame(VideoFrame& videoFrame) = 0;
   /**
    * Occurs each time the SDK receives a video frame decoded by the MediaPlayer.
    *
@@ -1125,27 +1770,32 @@ class IVideoFrameObserver {
    * After pre-processing, you can send the processed video data back to the SDK by setting the
    * `videoFrame` parameter in this callback.
    *
+   * @note
+   * - This callback will not be affected by the return values of \ref getVideoFrameProcessMode
+   * "getVideoFrameProcessMode", \ref getRotationApplied "getRotationApplied", \ref getMirrorApplied
+   * "getMirrorApplied", \ref getObservedFramePosition "getObservedFramePosition".
+   * - On Android, this callback is not affected by the return value of \ref
+   * getVideoFormatPreference "getVideoFormatPreference"
+   *
    * @param videoFrame A pointer to the video frame: VideoFrame
-   * @param mediaPlayerId of the mediaPlayer.
+   * @param mediaPlayerId ID of the mediaPlayer.
    * @return Determines whether to ignore the current video frame if the pre-processing fails:
    * - true: Do not ignore.
    * - false: Ignore, in which case this method does not sent the current video frame to the SDK.
    */
   virtual bool onMediaPlayerVideoFrame(VideoFrame& videoFrame, int mediaPlayerId) = 0;
 
-  virtual bool onSecondaryScreenCaptureVideoFrame(VideoFrame& videoFrame) = 0;
-
-  virtual bool onSecondaryPreEncodeScreenVideoFrame(VideoFrame& videoFrame) = 0;
-
   /**
    * Occurs each time the SDK receives a video frame sent by the remote user.
    *
-   * After you successfully register the video frame observer, the SDK triggers this callback each time a
-   * video frame is received. In this callback, you can get the video data sent by the remote user. You
-   * can then post-process the data according to your scenarios.
+   * After you successfully register the video frame observer, the SDK triggers this callback each
+   * time a video frame is received. In this callback, you can get the video data sent by the remote
+   * user. You can then post-process the data according to your scenarios.
    *
-   * After post-processing, you can send the processed data back to the SDK by setting the `videoFrame`
-   * parameter in this callback.
+   * After post-processing, you can send the processed data back to the SDK by setting the
+   * `videoFrame` parameter in this callback.
+   *
+   * @note This callback does not support sending processed RGBA video data back to the SDK.
    *
    * @param channelId The channel name
    * @param remoteUid ID of the remote user who sends the current video frame.
@@ -1154,59 +1804,95 @@ class IVideoFrameObserver {
    * - true: Do not ignore.
    * - false: Ignore, in which case this method does not sent the current video frame to the SDK.
    */
-  virtual bool onRenderVideoFrame(const char* channelId, rtc::uid_t remoteUid, VideoFrame& videoFrame) = 0;
+  virtual bool onRenderVideoFrame(const char* channelId, rtc::uid_t remoteUid,
+                                  VideoFrame& videoFrame) = 0;
 
   virtual bool onTranscodedVideoFrame(VideoFrame& videoFrame) = 0;
 
   /**
-   * Indicate the video frame mode of the observer.
-   * @return VIDEO_FRAME_PROCESS_MODE
-   */
-  virtual VIDEO_FRAME_PROCESS_MODE getVideoFrameProcessMode() {
-    return PROCESS_MODE_READ_ONLY;
-  }
-
-  /*
-   * Occurs each time needs to get preference video frame type.
+   * Occurs each time the SDK receives a video frame and prompts you to set the process mode of the
+   * video frame.
    *
-   * @return preference video pixel format.
+   * After you successfully register the video frame observer, the SDK triggers this callback each
+   * time it receives a video frame. You need to set your preferred process mode in the return value
+   * of this callback.
+   * @return VIDEO_FRAME_PROCESS_MODE.
+   */
+  virtual VIDEO_FRAME_PROCESS_MODE getVideoFrameProcessMode() { return PROCESS_MODE_READ_ONLY; }
+
+  /**
+   * Sets the format of the raw video data output by the SDK.
+   *
+   * If you want to get raw video data in a color encoding format other than YUV 420, register this
+   * callback when calling `registerVideoFrameObserver`. After you successfully register the video
+   * frame observer, the SDK triggers this callback each time it receives a video frame. You need to
+   * set your preferred video data in the return value of this callback.
+   *
+   * @note If you want the video captured by the sender to be the original format, set the original
+   * video data format to VIDEO_PIXEL_DEFAULT in the return value. On different platforms, the
+   * original video pixel format is also different, for the actual video pixel format, see
+   * `VideoFrame`.
+   *
+   * @return Sets the video format. See VIDEO_PIXEL_FORMAT.
    */
   virtual base::VIDEO_PIXEL_FORMAT getVideoFormatPreference() { return base::VIDEO_PIXEL_DEFAULT; }
 
   /**
-   * Occurs each time needs to get rotation angle.
+   * Occurs each time the SDK receives a video frame, and prompts you whether to rotate the captured
+   * video.
+   *
+   * If you want to rotate the captured video according to the rotation member in the `VideoFrame`
+   * class, register this callback by calling `registerVideoFrameObserver`. After you successfully
+   * register the video frame observer, the SDK triggers this callback each time it receives a video
+   * frame. You need to set whether to rotate the video frame in the return value of this callback.
+   *
+   * @note This function only supports video data in RGBA or YUV420.
    *
    * @return Determines whether to rotate.
-   * - true: need to rotate.
-   * - false: no rotate.
+   * - `true`: Rotate the captured video.
+   * - `false`: (Default) Do not rotate the captured video.
    */
   virtual bool getRotationApplied() { return false; }
 
   /**
-   * Occurs each time needs to get whether mirror is applied or not.
+   * Occurs each time the SDK receives a video frame and prompts you whether or not to mirror the
+   * captured video.
+   *
+   * If the video data you want to obtain is a mirror image of the original video, you need to
+   * register this callback when calling `registerVideoFrameObserver`. After you successfully
+   * register the video frame observer, the SDK triggers this callback each time it receives a video
+   * frame. You need to set whether or not to mirror the video frame in the return value of this
+   * callback.
+   *
+   * @note This function only supports video data in RGBA and YUV420 formats.
    *
    * @return Determines whether to mirror.
-   * - true: need to mirror.
-   * - false: no mirror.
+   * - `true`: Mirror the captured video.
+   * - `false`: (Default) Do not mirror the captured video.
    */
   virtual bool getMirrorApplied() { return false; }
 
   /**
    * Sets the frame position for the video observer.
    *
-   * After you successfully register the video observer, the SDK triggers this callback each time it receives
-   * a video frame. You can determine which position to observe by setting the return value. The SDK provides
-   * 3 positions for observer. Each position corresponds to a callback function:
+   * After you successfully register the video observer, the SDK triggers this callback each time it
+   * receives a video frame. You can determine which position to observe by setting the return
+   * value. The SDK provides 3 positions for observer. Each position corresponds to a callback
+   * function:
    *
-   * POSITION_POST_CAPTURER(1 << 0): The position after capturing the video data, which corresponds to the onCaptureVideoFrame callback.
-   * POSITION_PRE_RENDERER(1 << 1): The position before receiving the remote video data, which corresponds to the onRenderVideoFrame callback.
-   * POSITION_PRE_ENCODER(1 << 2): The position before encoding the video data, which corresponds to the onPreEncodeVideoFrame callback.
+   * POSITION_POST_CAPTURER(1 << 0): The position after capturing the video data, which corresponds
+   * to the onCaptureVideoFrame callback. POSITION_PRE_RENDERER(1 << 1): The position before
+   * receiving the remote video data, which corresponds to the onRenderVideoFrame callback.
+   * POSITION_PRE_ENCODER(1 << 2): The position before encoding the video data, which corresponds to
+   * the onPreEncodeVideoFrame callback.
    *
    * To observe multiple frame positions, use '|' (the OR operator).
-   * This callback observes POSITION_POST_CAPTURER(1 << 0) and POSITION_PRE_RENDERER(1 << 1) by default.
-   * To conserve the system consumption, you can reduce the number of frame positions that you want to observe.
+   * This callback observes POSITION_POST_CAPTURER(1 << 0) and POSITION_PRE_RENDERER(1 << 1) by
+   * default. To conserve the system consumption, you can reduce the number of frame positions that
+   * you want to observe.
    *
-   * @return A bit mask that controls the frame position of the video observer: VIDEO_OBSERVER_POSITION.
+   * @return A bit mask that controls the frame position of the video observer:
+   * VIDEO_OBSERVER_POSITION.
    */
   virtual uint32_t getObservedFramePosition() {
     return base::POSITION_POST_CAPTURER | base::POSITION_PRE_RENDERER;
@@ -1235,5 +1921,249 @@ enum EXTERNAL_VIDEO_SOURCE_TYPE {
    */
   ENCODED_VIDEO_FRAME,
 };
+
+/**
+ * The format of the recording file.
+ *
+ * @since v3.5.2
+ */
+enum MediaRecorderContainerFormat {
+  /**
+   * 1: (Default) MP4.
+   */
+  FORMAT_MP4 = 1,
+};
+/**
+ * The recording content.
+ *
+ * @since v3.5.2
+ */
+enum MediaRecorderStreamType {
+  /**
+   * Only audio.
+   */
+  STREAM_TYPE_AUDIO = 0x01,
+  /**
+   * Only video.
+   */
+  STREAM_TYPE_VIDEO = 0x02,
+  /**
+   * (Default) Audio and video.
+   */
+  STREAM_TYPE_BOTH = STREAM_TYPE_AUDIO | STREAM_TYPE_VIDEO,
+};
+/**
+ * The current recording state.
+ *
+ * @since v3.5.2
+ */
+enum RecorderState {
+  /**
+   * -1: An error occurs during the recording. See RecorderReasonCode for the reason.
+   */
+  RECORDER_STATE_ERROR = -1,
+  /**
+   * 2: The audio and video recording is started.
+   */
+  RECORDER_STATE_START = 2,
+  /**
+   * 3: The audio and video recording is stopped.
+   */
+  RECORDER_STATE_STOP = 3,
+};
+/**
+ * The reason for the state change
+ *
+ * @since v3.5.2
+ */
+enum RecorderReasonCode {
+  /**
+   * 0: No error occurs.
+   */
+  RECORDER_REASON_NONE = 0,
+  /**
+   * 1: The SDK fails to write the recorded data to a file.
+   */
+  RECORDER_REASON_WRITE_FAILED = 1,
+  /**
+   * 2: The SDK does not detect audio and video streams to be recorded, or audio and video streams
+   * are interrupted for more than five seconds during recording.
+   */
+  RECORDER_REASON_NO_STREAM = 2,
+  /**
+   * 3: The recording duration exceeds the upper limit.
+   */
+  RECORDER_REASON_OVER_MAX_DURATION = 3,
+  /**
+   * 4: The recording configuration changes.
+   */
+  RECORDER_REASON_CONFIG_CHANGED = 4,
+};
+/**
+ * Configurations for the local audio and video recording.
+ *
+ * @since v3.5.2
+ */
+struct MediaRecorderConfiguration {
+  /**
+   * The absolute path (including the filename extensions) of the recording file.
+   * For example, `C:\Users\<user_name>\AppData\Local\Agora\<process_name>\example.mp4` on Windows,
+   * `/App Sandbox/Library/Caches/example.mp4` on iOS, `/Library/Logs/example.mp4` on macOS, and
+   * `/storage/emulated/0/Android/data/<package name>/files/example.mp4` on Android.
+   *
+   * @note Ensure that the specified path exists and is writable.
+   */
+  const char* storagePath;
+  /**
+   * The format of the recording file. See \ref agora::rtc::MediaRecorderContainerFormat
+   * "MediaRecorderContainerFormat".
+   */
+  MediaRecorderContainerFormat containerFormat;
+  /**
+   * The recording content. See \ref agora::rtc::MediaRecorderStreamType "MediaRecorderStreamType".
+   */
+  MediaRecorderStreamType streamType;
+  /**
+   * The maximum recording duration, in milliseconds. The default value is 120000.
+   */
+  int maxDurationMs;
+  /**
+   * The interval (ms) of updating the recording information. The value range is
+   * [1000,10000]. Based on the set value of `recorderInfoUpdateInterval`, the
+   * SDK triggers the \ref IMediaRecorderObserver::onRecorderInfoUpdated "onRecorderInfoUpdated"
+   * callback to report the updated recording information.
+   */
+  int recorderInfoUpdateInterval;
+  /**
+   * The video width
+   */
+  int width;
+  /**
+   * The video height
+   */
+  int height;
+  /**
+   * The video fps
+   */
+  int fps;
+  /**
+   * The audio sample rate
+   */
+  int sample_rate;
+  /**
+   * The audio channel nums
+   */
+  int channel_num;
+  /**
+   * The video source just for out channel recoder
+   */
+  agora::rtc::VIDEO_SOURCE_TYPE videoSourceType;
+
+  MediaRecorderConfiguration()
+      : storagePath(NULL),
+        containerFormat(FORMAT_MP4),
+        streamType(STREAM_TYPE_BOTH),
+        maxDurationMs(120000),
+        recorderInfoUpdateInterval(0),
+        width(1280),
+        height(720),
+        fps(30),
+        sample_rate(48000),
+        channel_num(1),
+        videoSourceType(rtc::VIDEO_SOURCE_CAMERA_PRIMARY) {}
+  MediaRecorderConfiguration(const char* path, MediaRecorderContainerFormat format,
+                             MediaRecorderStreamType type, int duration, int interval)
+      : storagePath(path),
+        containerFormat(format),
+        streamType(type),
+        maxDurationMs(duration),
+        recorderInfoUpdateInterval(interval),
+        width(1280),
+        height(720),
+        fps(30),
+        sample_rate(48000),
+        channel_num(1),
+        videoSourceType(rtc::VIDEO_SOURCE_CAMERA_PRIMARY) {}
+};
+
+class IFaceInfoObserver {
+ public:
+  /**
+   * Occurs when the face info is received.
+   * @param outFaceInfo The output face info.
+   * @return
+   * - true: The face info is valid.
+   * - false: The face info is invalid.
+   */
+  virtual bool onFaceInfo(const char* outFaceInfo) = 0;
+
+  virtual ~IFaceInfoObserver() {}
+};
+
+/**
+ * Information for the recording file.
+ *
+ * @since v3.5.2
+ */
+struct RecorderInfo {
+  /**
+   * The absolute path of the recording file.
+   */
+  const char* fileName;
+  /**
+   * The recording duration, in milliseconds.
+   */
+  unsigned int durationMs;
+  /**
+   * The size in bytes of the recording file.
+   */
+  unsigned int fileSize;
+
+  RecorderInfo() : fileName(NULL), durationMs(0), fileSize(0) {}
+  RecorderInfo(const char* name, unsigned int dur, unsigned int size)
+      : fileName(name), durationMs(dur), fileSize(size) {}
+};
+
+class IMediaRecorderObserver {
+ public:
+  /**
+   * Occurs when the recording state changes.
+   *
+   * @since v4.0.0
+   *
+   * When the local audio and video recording state changes, the SDK triggers this callback to
+   * report the current recording state and the reason for the change.
+   *
+   * @param channelId The channel name.
+   * @param uid ID of the user.
+   * @param state The current recording state. See \ref agora::media::RecorderState "RecorderState".
+   * @param reason The reason for the state change. See \ref agora::media::RecorderReasonCode
+   * @param filename The filename for the recorder
+   * "RecorderReasonCode".
+   */
+  virtual void onRecorderStateChanged(const char* channelId, rtc::uid_t uid, RecorderState state,
+                                      RecorderReasonCode reason, const char* filename) = 0;
+  /**
+   * Occurs when the recording information is updated.
+   *
+   * @since v4.0.0
+   *
+   * After you successfully register this callback and enable the local audio and video recording,
+   * the SDK periodically triggers the `onRecorderInfoUpdated` callback based on the set value of
+   * `recorderInfoUpdateInterval`. This callback reports the filename, duration, and size of the
+   * current recording file.
+   *
+   * @param channelId The channel name.
+   * @param uid ID of the user.
+   * @param info Information about the recording file. See \ref agora::media::RecorderInfo
+   * "RecorderInfo".
+   *
+   */
+  virtual void onRecorderInfoUpdated(const char* channelId, rtc::uid_t uid,
+                                     const RecorderInfo& info) = 0;
+
+  virtual ~IMediaRecorderObserver() {}
+};
+
 }  // namespace media
 }  // namespace agora

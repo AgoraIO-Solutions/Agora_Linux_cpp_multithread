@@ -20,6 +20,14 @@
 #include "NGIAgoraVideoMixerSource.h"
 
 
+struct videoInfo{
+  int width;
+  int height;
+  bool muted;
+  videoInfo():width(0),height(0),muted(true) {};
+  videoInfo(int w ,int h ,bool mute):width(w),height(h),muted(mute) {};
+};
+
 class SampleLocalUserObserver : public agora::rtc::ILocalUserObserver {
  public:
   SampleLocalUserObserver(agora::rtc::IRtcConnection* connection);
@@ -41,6 +49,10 @@ class SampleLocalUserObserver : public agora::rtc::ILocalUserObserver {
 
   void setVideoEncodedImageReceiver(agora::media::IVideoEncodedFrameObserver* receiver) {
     video_encoded_receiver_ = receiver;
+  }
+
+  void setEncodedAudioFrameObserver(agora::rtc::IAudioEncodedFrameReceiver* observer) {
+    audio_encoded_receiver_ = observer;
   }
 
   void setAudioFrameObserver(agora::media::IAudioFrameObserverBase* observer) {
@@ -74,6 +86,10 @@ class SampleLocalUserObserver : public agora::rtc::ILocalUserObserver {
        enable_video_mix_ = enable;
   }
 
+void onStreamMessage(agora::user_id_t userId, int streamId, const char* data, size_t length) {
+        printf("the message is %s \n",data);
+    }
+
   void setVideoMixer( agora::agora_refptr<agora::rtc::IVideoMixerSource> video_mixer){
        video_mixer_ = video_mixer;
   }
@@ -96,31 +112,27 @@ class SampleLocalUserObserver : public agora::rtc::ILocalUserObserver {
                                     agora::rtc::REMOTE_AUDIO_STATE_REASON reason,
                                     int elapsed) override;
 
-  void onLocalAudioTrackStateChanged(agora::agora_refptr<agora::rtc::ILocalAudioTrack> audioTrack,
-                                     agora::rtc::LOCAL_AUDIO_STREAM_STATE state,
-                                     agora::rtc::LOCAL_AUDIO_STREAM_ERROR errorCode) override {}
-
   void onVideoTrackPublishSuccess(agora::agora_refptr<agora::rtc::ILocalVideoTrack> videoTrack) override {}
 
   void onVideoTrackPublicationFailure(agora::agora_refptr<agora::rtc::ILocalVideoTrack> videoTrack,
                                       agora::ERROR_CODE_TYPE error) override {}
 
   void onUserVideoTrackSubscribed(
-      agora::user_id_t userId, agora::rtc::VideoTrackInfo trackInfo,
+      agora::user_id_t userId,const agora::rtc::VideoTrackInfo& trackInfo,
       agora::agora_refptr<agora::rtc::IRemoteVideoTrack> videoTrack) override;
 
   void onUserVideoTrackStateChanged(agora::user_id_t userId,
                                     agora::agora_refptr<agora::rtc::IRemoteVideoTrack> videoTrack,
                                     agora::rtc::REMOTE_VIDEO_STATE state,
                                     agora::rtc::REMOTE_VIDEO_STATE_REASON reason,
-                                    int elapsed) override {}
+                                    int elapsed) ;
 
   void onRemoteVideoTrackStatistics(agora::agora_refptr<agora::rtc::IRemoteVideoTrack> videoTrack,
                                     const agora::rtc::RemoteVideoTrackStats& stats) override {}
 
   void onLocalVideoTrackStateChanged(agora::agora_refptr<agora::rtc::ILocalVideoTrack> videoTrack,
                                      agora::rtc::LOCAL_VIDEO_STREAM_STATE state,
-                                     agora::rtc::LOCAL_VIDEO_STREAM_ERROR errorCode) override {}
+                                     agora::rtc::LOCAL_VIDEO_STREAM_REASON reason) override {}
 
   void onLocalVideoTrackStatistics(agora::agora_refptr<agora::rtc::ILocalVideoTrack> videoTrack,
                                    const agora::rtc::LocalVideoTrackStats& stats) override {}
@@ -165,7 +177,13 @@ class SampleLocalUserObserver : public agora::rtc::ILocalUserObserver {
   void onFirstRemoteVideoDecoded(agora::user_id_t userId, int width, int height, int elapsed) override;
 
   // virtual void onFirstRemoteAudioDecoded(agora::user_id_t userId, int elapsed){}
-  
+  void onAudioTrackPublishStart(agora::agora_refptr<agora::rtc::ILocalAudioTrack> audioTrack) override {}
+
+  void onAudioTrackUnpublished(agora::agora_refptr<agora::rtc::ILocalAudioTrack> audioTrack) override {}
+
+  void onVideoTrackPublishStart(agora::agora_refptr<agora::rtc::ILocalVideoTrack> videoTrack) override {}
+
+  void onVideoTrackUnpublished(agora::agora_refptr<agora::rtc::ILocalVideoTrack> videoTrack)override {}
 
   void onVideoSizeChanged(agora::user_id_t userId, int width, int height, int rotation) {}
   void onActiveSpeaker(agora::user_id_t userId){}
@@ -182,11 +200,13 @@ class SampleLocalUserObserver : public agora::rtc::ILocalUserObserver {
   agora::agora_refptr<agora::rtc::IVideoMixerSource> video_mixer_{nullptr};
 
   agora::media::IVideoEncodedFrameObserver* video_encoded_receiver_{nullptr};
+  agora::rtc::IAudioEncodedFrameReceiver* audio_encoded_receiver_{nullptr};
+
   agora::media::IAudioFrameObserverBase* audio_frame_observer_{nullptr};
   agora::rtc::IVideoFrameObserver2* video_frame_observer_{nullptr};
 
   std::map<std::string ,agora::agora_refptr<agora::rtc::IRemoteVideoTrack>> remote_video_track_map_;
-  std::map<std::string ,agora::rtc::MixerLayoutConfig> remote_source_map_;
+  std::map<std::string ,videoInfo> remote_source_map_;
 
 
   std::mutex observer_lock_;

@@ -1,3 +1,9 @@
+//
+//  Agora SDK
+//
+//  Copyright (c) 2021 Agora.io. All rights reserved.
+//
+
 #pragma once
 
 #include "AgoraRefPtr.h"
@@ -29,12 +35,66 @@ class IExtensionControl;
 class IExtensionProvider : public RefCountInterface {
  public:
   enum EXTENSION_TYPE {
+  /**
+   * note: discarded, Don't use it anymore.
+   */
     AUDIO_FILTER,
+    /**
+     * note: discarded, Don't use it anymore.
+     */
     VIDEO_PRE_PROCESSING_FILTER,
     VIDEO_POST_PROCESSING_FILTER,
     AUDIO_SINK,
     VIDEO_SINK,
-    UNKNOWN,
+    /*
+     * Used to modify locally captured audio data to play, such as ear monitoring.
+     */
+    AUDIO_RECORDING_LOCAL_PLAYBACK_FILTER = 10000,
+    /*
+     * Used to modify audio data after the local APM (3A).
+     */
+    AUDIO_POST_PROCESSING_FILTER = 10001,
+    /*
+     * Used to modify received and decoded remote user audio data.
+     */
+    AUDIO_REMOTE_USER_PLAYBACK_FILTER = 10002,
+    /*
+     * note: It is used internally by agora and does not support users other than agora.
+     *
+     * Used to modify the audio data of the sender's PCM source to take effect for sending and local playback.
+     */
+    AUDIO_PCM_SOURCE_FILTER = 10003,
+    /*
+     * note: It is used internally by agora and does not support users other than agora.
+     *
+     * Used to Modifying the audio data of the sender's PCM source is only effect for the sending.
+     */
+    AUDIO_PCM_SOURCE_SENDING_FILTER = 10004,
+    /*
+     * note: It is used internally by agora and does not support users other than agora.
+     *
+     * Used to Modifying the audio data of the sender's PCM source is only effect for the local playback.
+     */
+    AUDIO_PCM_SOURCE_LOCAL_PLAYBACK_FILTER = 10005,
+    /*
+     * note: It is used internally by agora and does not support users other than agora.
+     *
+     * Used to modify local playback audio data after the remote audio mixed.
+     */
+    AUDIO_REMOTE_MIXED_PLAYBACK_FILTER = 10006,
+    /*
+     * Used to modify video data betweent capturer and post-capture observer
+     */
+    VIDEO_POST_CAPTURE_FILTER = 20001,
+    /*
+     * Used to modify video data betweent post-capture observer and preview
+     */
+    VIDEO_PRE_PREVIEW_FILTER = 20002,
+    /*
+     * Used to modify video data betweent adapter and encoder
+     */
+    VIDEO_PRE_ENCODER_FILTER = 20003,
+    UNKNOWN = 0xFFFF,
   };
 
   struct ExtensionMetaInfo {
@@ -61,7 +121,7 @@ class IExtensionProvider : public RefCountInterface {
   virtual agora_refptr<IVideoSinkBase> createVideoSink(const char* name) {
     return NULL;
   }
-
+  
   virtual void setProperty(const char* key, const char* value) {}
 
  protected:

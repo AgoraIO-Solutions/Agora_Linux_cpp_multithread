@@ -221,7 +221,7 @@ int main(int argc, char *argv[])
 	agora::agora_refptr<agora::rtc::IVideoSinkBase> yuvFrameObserver =
 			new agora::RefCountedObject<YuvFrameObserver>(options.videoFile);
 
-	mixVideoTrack->addRenderer(yuvFrameObserver.get());
+	mixVideoTrack->addRenderer(yuvFrameObserver.get(),agora::media::base::VIDEO_MODULE_POSITION::POSITION_PRE_ENCODER);
 	//printf("it is %d \n",b);
 	mixVideoTrack->setEnabled(true);
 	localUserObserver->setEnableVideoMix(true);

@@ -43,9 +43,6 @@ struct SampleOptions
     std::string audioFile = DEFAULT_AUDIO_FILE;
     std::string videoFile = DEFAULT_VIDEO_FILE;
     int multiChannels = 1;
-    bool low_delay = false;
-    int video_resend = 3;
-    int audio_resend = 3;
     struct
     {
         int sampleRate = DEFAULT_SAMPLE_RATE;
@@ -57,6 +54,7 @@ struct SampleOptions
         int width = DEFAULT_VIDEO_WIDTH;
         int height = DEFAULT_VIDEO_HEIGHT;
         int frameRate = DEFAULT_FRAME_RATE;
+        bool enable_hw_encoder = false;
     } video;
 };
 
@@ -102,7 +100,7 @@ static void sendOnePcmFrame(
     }
 
     if (audioPcmDataSender->sendAudioPcmData(
-            frameBuf, 0, samplesPer10ms, agora::rtc::TWO_BYTES_PER_SAMPLE,
+            frameBuf, 0, 0, samplesPer10ms, agora::rtc::TWO_BYTES_PER_SAMPLE,
             options.audio.numOfChannels, options.audio.sampleRate) < 0)
     {
         AG_LOG(ERROR, "Failed to send audio frame!");
@@ -209,73 +207,19 @@ static int connectWorker(agora::base::IAgoraService *service, int channel_index,
         return -1;
     }
 
-    if (options.low_delay == true)
+    if (options.video.enable_hw_encoder)
     {
-        int ret = connection->getLocalUser()->setAudioScenario(
-            agora::rtc::AUDIO_SCENARIO_TYPE::AUDIO_SCENARIO_CHORUS);
-        if (!ret)
-        {
-            AG_LOG(
-                INFO,
-                "[Low Delay] setAudioScenario : AUDIO_SCENARIO_CHORUS successfully!");
-        }
-        else
-        {
-            AG_LOG(INFO,
-                   "[Low Delay] setAudioScenario : AUDIO_SCENARIO_CHORUS fail! The "
-                   "err num is %d",
-                   ret);
-        }
-
         auto s = connection->getAgoraParameter();
-        // ret = s->setParameters("{\"rtc.video.uplink_max_retry_times\": 3}");
-        ret = s->setUInt("rtc.video.uplink_max_retry_times", options.audio_resend);
-        if (!ret)
-        {
-            AG_LOG(INFO, "[Low Delay] set the max video resend times %d successfully!", options.video_resend);
-        }
-        else
-        {
-            AG_LOG(INFO,
-                   "[Low Delay] close video resend  fail! The "
-                   "err num is %d",
-                   ret);
-        }
-
-        // ret = s->setParameters("{\"rtc.audio.uplink_max_retry_times\": 3}");
-        ret = s->setUInt("rtc.audio.uplink_max_retry_times", options.audio_resend);
-        if (!ret)
-        {
-            AG_LOG(INFO, "[Low Delay] set the max audio resend times %d successfully!", options.audio_resend);
-        }
-        else
-        {
-            AG_LOG(INFO,
-                   "[Low Delay] close audio resend fail! The "
-                   "err num is %d",
-                   ret);
-        }
-        ret = s->setParameters("{\"rtc.paced_sender_enabled\": 0}");
-        if (!ret)
-        {
-            AG_LOG(
-                INFO,
-                "[Low Delay] close the send pacer successfully!");
-        }
-        else
-        {
-            AG_LOG(INFO,
-                   "[Low Delay] close the send pacer fail! The "
-                   "err num is %d",
-                   ret);
-        }
+        int ret = s->setBool("engine.video.enable_hw_encoder", true);
+        ret = s->setString("engine.video.hw_encoder_provider", "nv");
     }
+
     // Register connection observer to monitor connection event
     auto connObserver = std::make_shared<SampleConnectionObserver>();
     connection->registerObserver(connObserver.get());
 
     // Connect to Agora channel
-    if (connection->connect(options.appId.c_str(), (options.channelId + to_string(channel_index)).c_str(),
+    if (connection->connect(options.appId.c_str(), options.channelId.c_str(),
                             options.userId.c_str()))
     {
         AG_LOG(ERROR, "Failed to connect to Agora channel!");
@@ -293,8 +237,7 @@ static int connectWorker(agora::base::IAgoraService *service, int channel_index,
     // Create audio data sender
     /* agora::agora_refptr<agora::rtc::IAudioPcmDataSender> audioPcmDataSender =
         factory->createAudioPcmDataSender();
-    if (!audioPcmDataSender)
-    {
+  if (!audioPcmDataSender) {
         AG_LOG(ERROR, "Failed to create audio data sender!");
         return -1;
     }
@@ -302,8 +245,7 @@ static int connectWorker(agora::base::IAgoraService *service, int channel_index,
     // Create audio track
     agora::agora_refptr<agora::rtc::ILocalAudioTrack> customAudioTrack =
         service->createCustomAudioTrack(audioPcmDataSender);
-    if (!customAudioTrack)
-    {
+  if (!customAudioTrack) {
         AG_LOG(ERROR, "Failed to create audio track!");
         return -1;
     }
@@ -347,8 +289,8 @@ static int connectWorker(agora::base::IAgoraService *service, int channel_index,
 
     // Start sending media data
     AG_LOG(INFO, "Start sending audio & video data ...");
-    // std::thread sendAudioThread(SampleSendAudioTask, options, audioPcmDataSender,
-    //                             std::ref(exitFlag));
+    //std::thread sendAudioThread(SampleSendAudioTask, options, audioPcmDataSender,
+    //                            std::ref(exitFlag));
     std::thread sendVideoThread(SampleSendVideoTask, options, videoFrameSender,
                                 std::ref(exitFlag));
 
@@ -388,6 +330,7 @@ static void SignalHandler(int sigNo) { exitFlag = true; }
 
 int main(int argc, char *argv[])
 {
+    SampleOptions options;
     opt_parser optParser;
     std::thread *th_array = new std::thread[MAX_NUM_OF_THREAD];
 
@@ -397,11 +340,8 @@ int main(int argc, char *argv[])
     optParser.add_long_opt("userId", &options.userId, "User Id / default is 0");
     optParser.add_long_opt("audioFile", &options.audioFile,
                            "The audio file in raw PCM format to be sent");
-    optParser.add_long_opt("lowdelay", &options.low_delay,
-                           "enable the low delay");
     optParser.add_long_opt("videoFile", &options.videoFile,
                            "The video file in YUV420 format to be sent");
-    optParser.add_long_opt("multiChannels", &options.multiChannels, "Num of multithread channels, no more than 100");
     optParser.add_long_opt("sampleRate", &options.audio.sampleRate,
                            "Sample rate for the PCM file to be sent");
     optParser.add_long_opt("numOfChannels", &options.audio.numOfChannels,
@@ -413,6 +353,8 @@ int main(int argc, char *argv[])
     optParser.add_long_opt("height", &options.video.height,
                            "Image height for the YUV file to be sent");
     optParser.add_long_opt("bitrate", &options.video.targetBitrate,
+                           "Target bitrate (bps) for encoding the YUV stream");
+    optParser.add_long_opt("hwencoder", &options.video.enable_hw_encoder,
                            "Target bitrate (bps) for encoding the YUV stream");
 
     if ((argc <= 1) || !optParser.parse_opts(argc, argv))
@@ -434,20 +376,12 @@ int main(int argc, char *argv[])
         AG_LOG(ERROR, "Must provide channelId!");
         return -1;
     }
-
     std::signal(SIGQUIT, SignalHandler);
     std::signal(SIGABRT, SignalHandler);
     std::signal(SIGINT, SignalHandler);
     agora::base::IAgoraService *service = nullptr;
     // Create Agora service
-    if (options.low_delay)
-    {
-        service = createAndInitAgoraService(false, true, true, false, true);
-    }
-    else
-    {
-        service = createAndInitAgoraService(false, true, true);
-    }
+    service = createAndInitAgoraService(false, true, true);
     if (!service)
     {
         AG_LOG(ERROR, "Failed to creating Agora service!");

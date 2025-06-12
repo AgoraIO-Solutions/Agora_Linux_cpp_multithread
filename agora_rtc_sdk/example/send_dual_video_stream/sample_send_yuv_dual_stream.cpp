@@ -203,10 +203,15 @@ int main(int argc, char* argv[]) {
   customVideoTrack->setVideoEncoderConfiguration(encoderConfig);
   // Set the dual_model ahd low_stream
   agora::rtc::VideoDimensions low_dimensions(options.video.width / 2, options.video.height / 2);
-  agora::rtc::SimulcastStreamConfig Low_streamConfig;
-  Low_streamConfig.dimensions = low_dimensions;
-  Low_streamConfig.bitrate = options.video.targetBitrate / 2;
-  customVideoTrack->enableSimulcastStream(true, Low_streamConfig);
+  agora::rtc::SimulcastConfigInternal Low_streamConfig;
+
+    Low_streamConfig.simulcastlayerConfigs[agora::rtc::StreamLayerIndexInternal::STREAM_LOW].dimensions.width =options.video.width / 2;
+    Low_streamConfig.simulcastlayerConfigs[agora::rtc::StreamLayerIndexInternal::STREAM_LOW].dimensions.height = options.video.height / 2;
+    Low_streamConfig.simulcastlayerConfigs[agora::rtc::StreamLayerIndexInternal::STREAM_LOW].enable = true;
+    Low_streamConfig.simulcastlayerConfigs[agora::rtc::StreamLayerIndexInternal::STREAM_LOW].framerate = 15;
+  // Low_streamConfig.dimensions = low_dimensions;
+  // Low_streamConfig.kBitrate = options.video.targetBitrate / 2000;
+  customVideoTrack->setSimulcastStreamMode(agora::rtc::SIMULCAST_STREAM_MODE::ENABLE_SIMULCAST_STREAM, Low_streamConfig);
   // Publish video track
   customVideoTrack->setEnabled(true);
   connection->getLocalUser()->publishVideo(customVideoTrack);

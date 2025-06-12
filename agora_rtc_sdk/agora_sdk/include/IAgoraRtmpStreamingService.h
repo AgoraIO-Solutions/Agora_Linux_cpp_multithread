@@ -12,6 +12,7 @@
 #include "AgoraRefPtr.h"
 #include "IAgoraService.h"
 #include "NGIAgoraRtcConnection.h"
+#include <api/cpp/aosl_ares_class.h>
 
 namespace agora {
 namespace rtc {
@@ -51,13 +52,13 @@ public:
    *
    * @param url The RTMP URL address.
    * @param state The RTMP streaming state: #RTMP_STREAM_PUBLISH_STATE.
-   * @param errCode The detailed error information for streaming: #RTMP_STREAM_PUBLISH_ERROR_TYPE.
+   * @param reason The detailed error information for streaming: #RTMP_STREAM_PUBLISH_REASON.
    */
   virtual void onRtmpStreamingStateChanged(const char* url, RTMP_STREAM_PUBLISH_STATE state,
-                                           RTMP_STREAM_PUBLISH_ERROR_TYPE errCode) {
+                                           RTMP_STREAM_PUBLISH_REASON reason) {
     (void)url;
     (void)state;
-    (void)errCode;
+    (void)reason;
   }
 
   /** Reports events during the RTMP or RTMPS streaming.
@@ -71,27 +72,6 @@ public:
     (void)url;
     (void)eventCode;
   }
-
-  /**
-   * Reports the result of the `addPublishStreamUrl` method.
-   *
-   * This callback reports whether you have successfully added an RTMP stream to the CDN.
-   *
-   * @param url The RTMP URL address.
-   * @param error The detailed error information.
-   */
-  virtual void onStreamPublished(const char* url, int error) {
-    (void)url;
-    (void)error;
-  }
-  /**
-   * Reports the result of calling the `removePublishStreamUrl` method.
-   *
-   * This callback reports whether you have successfully removed an RTMP stream from the CDN.
-   *
-   * @param url The RTMP URL address.
-   */
-  virtual void onStreamUnpublished(const char* url) { (void)url; }
   /**
    * Occurs when the publisher's transcoding settings are updated.
    *
@@ -109,61 +89,6 @@ public:
  */
 class IRtmpStreamingService : public RefCountInterface {
  public:
-  /**
-   * Publishes the local stream to the CDN.
-   *
-   * This method triggers the `onRtmpStreamingStateChanged` callback on the local client to report the state of
-   * adding a local stream to the CDN.
-   *
-   * @note
-   * - Ensure that you enable the RTMP Converter service before using this function.
-   * - This method applies to Live-Broadcast only.
-   * - Ensure that the user joins a channel before calling this method.
-   * - This method adds only one stream URL address each time it is called.
-   *
-   * @param url The CDN streaming URL in the RTMP format. The maximum length of this parameter is 1024 bytes.
-   * The URL address must not contain special character, such as Chinese language characters.
-   * @param transcodingEnabled Sets whether transcoding is enabled/disabled. If you set this parameter as `true`,
-   * ensure that you call the `setLiveTranscoding` method before this method.
-   * - true: Enable transcoding.
-   * - false: Disable transcoding.
-   *
-   * @return
-   * - 0: Success.
-   * - < 0: Failure.
-   */
-  virtual int addPublishStreamUrl(const char* url, bool transcodingEnabled) = 0;
-  /**
-   * Removes an RTMP stream from the CDN.
-   *
-   * This method removes the RTMP URL address added by `addPublishStreamUrl` from a CDN live stream. The SDK triggers the `onRtmpStreamingStated` callback
-   * on the local client to report the state of removing an RTMP stream from the CDN.
-   *
-   * @note
-   * - Ensure that you enable the RTMP Converter service before using this function.
-   * - This method applies to Live-Broadcast only.
-   * - This method removes only one stream URL address each time it is called.
-   *
-   * @param url The RTMP URL address to be removed. The maximum length of this parameter is 1024 bytes.
-   * The URL address must not contain special character, such as Chinese language characters.
-   *
-   * @return
-   * - 0: Success.
-   * - < 0: Failure.
-   */
-  virtual int removePublishStreamUrl(const char* url) = 0;
-  /**
-   * Sets the video layout and audio settings for CDN live.
-   *
-   * The SDK triggers the `onTranscodingUpdated` callback when the `LiveTranscoding` class is updated using this method.
-   * If you call this method to set `LiveTrancoding` for the first time, the SDK does not trigger this callback.
-   *
-   * @note
-   * - Ensure that you enable the RTMP Converter service before using this function.
-   * - This method applies to Live-Broadcast only.
-   * - Ensure that you call this method before calling addPublishStreamUrl().
-   */
-  virtual int setLiveTranscoding(const LiveTranscoding& transcoding) = 0;
 
   /** Publishes the local stream without transcoding to a specified CDN live RTMP address.  (CDN live only.)
 
@@ -181,10 +106,11 @@ class IRtmpStreamingService : public RefCountInterface {
     * @return
     * - 0: Success.
     * - < 0: Failure.
-    * - #ERR_INVALID_ARGUMENT (2): The RTMP URL address is NULL or has a string length of 0.
-    * - #ERR_NOT_INITIALIZED (7): You have not initialized the RTC engine when publishing the stream.
+    *   - #ERR_INVALID_ARGUMENT (2): The RTMP URL address is NULL or has a string length of 0.
+    *   - #ERR_NOT_INITIALIZED (7): You have not initialized the RTC engine when publishing the stream.
+    *   - #ERR_ALREADY_IN_USE (19): This streaming URL is already in use. Use a new streaming URL for CDN streaming.
     */
-  virtual int startRtmpStreamWithoutTranscoding(const char* url) = 0;
+  virtual int startRtmpStreamWithoutTranscoding(const char* url, aosl_ref_t ares = AOSL_REF_INVALID) = 0;
 
   /** Publishes the local stream with transcoding to a specified CDN live RTMP address.  (CDN live only.)
 
@@ -205,8 +131,9 @@ class IRtmpStreamingService : public RefCountInterface {
     * - < 0: Failure.
     *   - #ERR_INVALID_ARGUMENT (2): The RTMP URL address is NULL or has a string length of 0.
     *   - #ERR_NOT_INITIALIZED (7): You have not initialized the RTC engine when publishing the stream.
+    *   - #ERR_ALREADY_IN_USE (19): This streaming URL is already in use. Use a new streaming URL for CDN streaming.
     */
-  virtual int startRtmpStreamWithTranscoding(const char* url, const LiveTranscoding& transcoding) = 0;
+  virtual int startRtmpStreamWithTranscoding(const char* url, const LiveTranscoding& transcoding, aosl_ref_t ares = AOSL_REF_INVALID) = 0;
 
   /** Update the video layout and audio settings for CDN live. (CDN live only.)
     * @note This method applies to Live Broadcast only.
@@ -217,7 +144,7 @@ class IRtmpStreamingService : public RefCountInterface {
     * - 0: Success.
     * - < 0: Failure.
     */
-  virtual int updateRtmpTranscoding(const LiveTranscoding& transcoding) = 0;
+  virtual int updateRtmpTranscoding(const LiveTranscoding& transcoding, aosl_ref_t ares = AOSL_REF_INVALID) = 0;
   /** Stop an RTMP stream with transcoding or without transcoding from the CDN. (CDN live only.)
 
     * This method removes the RTMP URL address (added by the \ref IRtcEngine::startRtmpStreamWithoutTranscoding "startRtmpStreamWithoutTranscoding" method
@@ -236,7 +163,7 @@ class IRtmpStreamingService : public RefCountInterface {
     * - 0: Success.
     * - < 0: Failure.
     */
-  virtual int stopRtmpStream(const char* url) = 0;
+  virtual int stopRtmpStream(const char* url, aosl_ref_t ares = AOSL_REF_INVALID) = 0;
 
   /**
    * Registers an RTMP streaming observer.
@@ -245,7 +172,7 @@ class IRtmpStreamingService : public RefCountInterface {
    * - 0: Success.
    * - < 0: Failure.
    */
-  virtual int registerObserver(IRtmpStreamingObserver* observer) = 0;
+  virtual int registerObserver(IRtmpStreamingObserver* observer, aosl_ref_t ares = AOSL_REF_INVALID) = 0;
   /**
    * Releases the RTMP streaming observer created by registerObserver().
    * @param observer The pointer to the RTMP streaming observer that you want to release. See \ref agora::rtc::IRtmpStreamingObserver "IRtmpStreamingObserver".

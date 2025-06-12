@@ -9,6 +9,7 @@
 
 #include "AgoraBase.h"
 #include "time_utils.h"
+#include <api/cpp/aosl_ares_class.h>
 
 namespace agora {
 namespace rtc {
@@ -44,7 +45,11 @@ struct TConnectionInfo {
    */
   uid_t internalUid;
 
-  TConnectionInfo() : id(-1), state(CONNECTION_STATE_DISCONNECTED), internalUid(0) {}
+  int proxyType;
+
+  util::AString connectionIp;
+
+  TConnectionInfo() : id(-1), state(CONNECTION_STATE_DISCONNECTED), internalUid(0), proxyType(0) {}
 };
 
 struct TConnectSettings {
@@ -74,58 +79,6 @@ struct TConnectSettings {
   App can provide a app defined start time to trace some events like connect cost , first video, etc.
   */
   agora::Optional<int64_t> appDefinedStartTimeMs;
-};
-
-/**
- * The audio subscription options.
- */
-struct AudioSubscriptionOptions {
-  AudioSubscriptionOptions() :
-    packetOnly(false),
-    bytesPerSample(TWO_BYTES_PER_SAMPLE),
-    numberOfChannels(0),
-    sampleRateHz(0) {
-  }
-
-  AudioSubscriptionOptions(const AudioSubscriptionOptions &rhs) :
-      packetOnly(rhs.packetOnly),
-      bytesPerSample(rhs.bytesPerSample),
-      numberOfChannels(rhs.numberOfChannels),
-      sampleRateHz(rhs.sampleRateHz) {
-  }
-
-  AudioSubscriptionOptions& operator=(const AudioSubscriptionOptions& rhs)
-  {
-    if (this == &rhs) {
-      return *this;
-    }
-
-    packetOnly = rhs.packetOnly;
-    bytesPerSample = rhs.bytesPerSample;
-    numberOfChannels = rhs.numberOfChannels;
-    sampleRateHz = rhs.sampleRateHz;
-    return *this;
-  }
-  /**
-   * Whether to only subscribe to audio packets.
-   * - `true`: Only subscribe to audio packets, which means that the SDK does not decode the remote audio stream. You can use this mode to receive audio packets and handle them in your app.
-   * - `false`: (Default) The SDK automatically decodes the remote audio stream.
-   *
-   * @note If you set `packetOnly` as `true`, other fields in `AudioSubscriptionOptions` are ignored.
-  */
-  bool packetOnly;
-  /**
-   * The number of bytes that you expect for each audio sample.
-   */
-  size_t bytesPerSample;
-  /**
-   * The number of audio channels that you expect.
-   */
-  size_t numberOfChannels;
-  /**
-   * The audio sample rate (Hz) that you expect.
-   */
-  uint32_t sampleRateHz;
 };
 
 /**
@@ -165,10 +118,6 @@ struct RtcConnectionConfiguration {
    */
   int maxPort;
   /**
-   * The options for audio subscription. See \ref agora::rtc::AudioSubscriptionOptions "AudioSubscriptionOptions".
-   */
-  AudioSubscriptionOptions audioSubscriptionOptions;
-  /**
    * The user role. For details, see #CLIENT_ROLE_TYPE. The default user role is `CLIENT_ROLE_AUDIENCE`.
    */
   CLIENT_ROLE_TYPE clientRoleType;
@@ -200,6 +149,11 @@ struct RtcConnectionConfiguration {
    */
   bool isInteractiveAudience;
 
+  /**
+   * Indicates data channel only.
+   */
+  bool isDataChannelOnly;
+
   RtcConnectionConfiguration()
       : autoSubscribeAudio(true),
         autoSubscribeVideo(true),
@@ -212,7 +166,8 @@ struct RtcConnectionConfiguration {
         audioRecvEncodedFrame(false),
         audioRecvMediaPacket(false),
         videoRecvMediaPacket(false),
-        isInteractiveAudience(false) {}
+        isInteractiveAudience(false),
+        isDataChannelOnly(false) {}
 };
 
 /**
@@ -283,7 +238,7 @@ class IRtcConnection : public RefCountInterface {
    * - 0: Success.
    * - < 0: Failure.
    */
-  virtual int disconnect() = 0;
+  virtual int disconnect(aosl_ref_t ares = AOSL_REF_INVALID) = 0;
 
   /**
    * Starts the last-mile network probe test.
@@ -312,7 +267,7 @@ class IRtcConnection : public RefCountInterface {
    * - 0: Success.
    * - < 0: Failure.
    */
-  virtual int startLastmileProbeTest(const LastmileProbeConfig& config) = 0;
+  virtual int startLastmileProbeTest(const LastmileProbeConfig& config, aosl_ref_t ares = AOSL_REF_INVALID) = 0;
 
   /**
    * Stops the last-mile network probe test.
@@ -320,7 +275,7 @@ class IRtcConnection : public RefCountInterface {
    * - 0: Success.
    * - < 0: Failure.
    */
-  virtual int stopLastmileProbeTest() = 0;
+  virtual int stopLastmileProbeTest(aosl_ref_t ares = AOSL_REF_INVALID) = 0;
 
   /**
    * Renews the token.
@@ -331,7 +286,7 @@ class IRtcConnection : public RefCountInterface {
    *
    * @param token The pointer to the new token.
    */
-  virtual int renewToken(const char* token) = 0;
+  virtual int renewToken(const char* token, aosl_ref_t ares = AOSL_REF_INVALID) = 0;
 
   /**
    * Gets the connection information.
@@ -385,7 +340,7 @@ class IRtcConnection : public RefCountInterface {
    * - 0: Success.
    * - < 0: Failure.
    */
-  virtual int registerObserver(IRtcConnectionObserver* observer, void(*safeDeleter)(IRtcConnectionObserver*) = NULL) = 0;
+  virtual int registerObserver(IRtcConnectionObserver* observer, void(*safeDeleter)(IRtcConnectionObserver*) = NULL, aosl_ref_t ares = AOSL_REF_INVALID) = 0;
 
   /**
    * Releases the registered IRtcConnectionObserver object.
@@ -406,7 +361,7 @@ class IRtcConnection : public RefCountInterface {
    * - 0: Success.
    * - < 0: Failure.
    */
-  virtual int registerNetworkObserver(INetworkObserver* observer, void(*safeDeleter)(INetworkObserver*) = NULL) = 0;
+  virtual int registerNetworkObserver(INetworkObserver* observer, void(*safeDeleter)(INetworkObserver*) = NULL, aosl_ref_t ares = AOSL_REF_INVALID) = 0;
 
   /**
    * Releases the registered INetworkObserver object.
@@ -517,7 +472,7 @@ class IRtcConnection : public RefCountInterface {
    * - 0: Success.
    * - < 0: Failure.
    */
-  virtual int sendCustomReportMessage(const char* id, const char* category, const char* event, const char* label, int value) = 0;
+  virtual int sendCustomReportMessage(const char* id, const char* category, const char* event, const char* label, int value, aosl_ref_t ares = AOSL_REF_INVALID) = 0;
   /** Gets the user information by user account, which is in string format.
    *
    * @param userAccount The user account of the user.
@@ -542,19 +497,6 @@ class IRtcConnection : public RefCountInterface {
    * - < 0: Failure.
    */
   virtual int getUserInfoByUid(uid_t uid, rtc::UserInfo* userInfo) = 0;
-  /** Gets the NTP time.
-   *
-   * @note
-   * - Returns the wallclock time which is represented using the timestamp format of the Network Time Protocol (NTP), which is in milliseconds relative to 0h UTC on 1 January 1900.
-   *
-   * - The returned value may not be accurate, depending on whether the connection is normal to the NTP server.
-   *
-   * - The returned value can be validated by base::NtpTime::Valid().
-   *
-   * @return
-   * - A NtpTime object.
-   */
-  virtual base::NtpTime getNtpTime() = 0;
 };
 
 /**
@@ -686,10 +628,12 @@ class IRtcConnectionObserver {
    *
    * @param oldRole The previous role of the local user: \ref rtc::CLIENT_ROLE_TYPE "CLIENT_ROLE_TYPE".
    * @param newRole The current role of the local user: \ref rtc::CLIENT_ROLE_TYPE "CLIENT_ROLE_TYPE".
+   * @param newRoleOptions The client role options of the current role of the local user: \ref rtc::ClientRoleOptions "ClientRoleOptions".
    */
-  virtual void onChangeRoleSuccess(CLIENT_ROLE_TYPE oldRole, CLIENT_ROLE_TYPE newRole) {
+  virtual void onChangeRoleSuccess(CLIENT_ROLE_TYPE oldRole, CLIENT_ROLE_TYPE newRole, const ClientRoleOptions& newRoleOptions) {
     (void)oldRole;
     (void)newRole;
+    (void)newRoleOptions;
   }
 
   /**
@@ -698,6 +642,16 @@ class IRtcConnectionObserver {
   virtual void onChangeRoleFailure(CLIENT_ROLE_CHANGE_FAILED_REASON reason, CLIENT_ROLE_TYPE currentRole) {
     (void)reason;
     (void)currentRole;
+  }
+
+  /**
+   * Occurs when connection license verification fails
+   *
+   * You can know the reason accordding to error code
+   * @param error verify fail reason
+   */
+  virtual void onLicenseValidationFailure(LICENSE_ERROR_TYPE error) {
+    (void)error;
   }
 
   /**
@@ -724,20 +678,6 @@ class IRtcConnectionObserver {
     (void)type;
   }
 
-  /**
-   * Occurs when an API method is executed.
-   *
-   * @param err The error code that the SDK reports when the method call fails. If the SDK reports 0,
-   * the method call succeeds.
-   * @param api The API method that is executed.
-   * @param result The result of the method call.
-   */
-  virtual void onApiCallExecuted(int err, const char* api, const char* result) {
-    (void)err;
-    (void)api;
-    (void)result;
-  }
-
      /** Reports result of Content Inspect*/
   virtual void onContentInspectResult(media::CONTENT_INSPECT_RESULT result) { (void)result; }
     /** Occurs when takeSnapshot API result is obtained
@@ -752,8 +692,8 @@ class IRtcConnectionObserver {
    * @param height image height
    * @param errCode 0 is ok negative is error
    */
-  virtual void onSnapshotTaken(uid_t uid, const char* filePath, int width, int height, int errCode) {
-    (void)uid;
+  virtual void onSnapshotTaken(user_id_t userId, const char* filePath, int width, int height, int errCode) {
+    (void)userId;
     (void)filePath;
     (void)width;
     (void)height;
@@ -766,16 +706,6 @@ class IRtcConnectionObserver {
    */
   virtual void onError(ERROR_CODE_TYPE error, const char* msg) {
     (void)error;
-    (void)msg;
-  }
-
-  /**
-   * Reports the warning code and warning message.
-   * @param warning The warning code: #WARN_CODE_TYPE.
-   * @param msg The warning message.
-   */
-  virtual void onWarning(WARN_CODE_TYPE warning, const char* msg) {
-    (void)warning;
     (void)msg;
   }
 
@@ -821,7 +751,7 @@ class IRtcConnectionObserver {
   }
 
   /** Technical Preview, please do not depend on this event. */
-  virtual void onUserAccountUpdated(uid_t uid, const char* userAccount){
+  virtual void onUserAccountUpdated(uid_t uid, const char* userAccount) {
     (void)uid;
     (void)userAccount;
   }
@@ -861,6 +791,37 @@ class IRtcConnectionObserver {
     (void)requestId;
     (void)success;
     (void)reason;
+  }
+
+  /**
+   * Occurs when receive use rtm response.
+   *
+   * @param code The error code:
+   */
+  virtual void onSetRtmFlagResult(int code) {
+    (void)code;
+  }
+
+  /** Occurs when the WIFI message need be sent to the user.
+   *
+   * @param reason The reason of notifying the user of a message.
+   * @param action Suggest an action for the user.
+   * @param wlAccMsg The message content of notifying the user.
+   */
+  virtual void onWlAccMessage(WLACC_MESSAGE_REASON reason, WLACC_SUGGEST_ACTION action, const char* wlAccMsg) {
+    (void)reason;
+    (void)action;
+    (void)wlAccMsg;
+  }
+
+  /** Occurs when SDK statistics wifi acceleration optimization effect.
+   *
+   * @param currentStats Instantaneous value of optimization effect.
+   * @param averageStats Average value of cumulative optimization effect.
+   */
+  virtual void onWlAccStats(const WlAccStats& currentStats, const WlAccStats& averageStats) {
+    (void)currentStats;
+    (void)averageStats;
   }
 };
 

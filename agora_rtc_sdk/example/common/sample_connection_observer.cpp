@@ -71,3 +71,39 @@ void SampleConnectionObserver::onUserLeft(agora::user_id_t userId,
 {
 	AG_LOG(INFO, "onUserLeft: userId %s, reason %d\n", userId, reason);
 }
+/************for rtmp*************************/
+void RtmpConnectionObserver::onConnected(const agora::rtc::RtmpConnectionInfo &connectionInfo)
+{
+	AG_LOG(INFO, "onConnected: rtmp connect successfully.");
+	connect_ready_.Set();
+}
+void RtmpConnectionObserver::onDisconnected(const agora::rtc::RtmpConnectionInfo &connectionInfo)
+{
+	AG_LOG(INFO, "onDisconnected:");
+	disconnect_ready_.Set();
+}
+void RtmpConnectionObserver::onReconnecting(const agora::rtc::RtmpConnectionInfo &connectionInfo)
+{
+	AG_LOG(INFO, "onReconnecting:");
+}
+void RtmpConnectionObserver::onReconnected(const agora::rtc::RtmpConnectionInfo &connectionInfo)
+{
+	AG_LOG(INFO, "onReconnected:");
+}
+void RtmpConnectionObserver::onConnectionFailure(
+		const agora::rtc::RtmpConnectionInfo &connectionInfo,
+		agora::rtc::RTMP_CONNECTION_ERROR errCode)
+{
+	AG_LOG(INFO, "onConnectionFailure: errcode = %d", errCode);
+}
+void RtmpConnectionObserver::onTransferStatistics(uint64_t video_width, uint64_t video_height,
+												  uint64_t video_bitrate, uint64_t audio_bitrate,
+												  uint64_t video_frame_rate,
+												  uint64_t push_video_frame_cnt,
+												  uint64_t pop_video_frame_cnt)
+{
+	AG_LOG(INFO,
+		   "video_bitrate: %lu, audio_bitrate: %lu, video_frame_rate: %lu, push_video_frame_cnt: %lu, pop_video_frame_cnt: %lu",
+		   video_bitrate, audio_bitrate, video_frame_rate, push_video_frame_cnt,
+		   pop_video_frame_cnt);
+}

@@ -130,7 +130,18 @@ class PcmFrameObserver : public agora::media::IAudioFrameObserverBase {
 
   bool onPlaybackAudioFrameBeforeMixing(const char* channelId, agora::media::base::user_id_t userId, AudioFrame& audioFrame) override;
 
-  bool onEarMonitoringAudioFrame(AudioFrame& audioFrame) {return true;};
+  int getObservedAudioFramePosition() override {return 0;};
+
+  bool onEarMonitoringAudioFrame(AudioFrame& audioFrame) override {return true;};
+
+  AudioParams getEarMonitoringAudioParams()override {return  AudioParams();};
+
+  AudioParams getPlaybackAudioParams() override {return  AudioParams();};
+
+  AudioParams getRecordAudioParams()  override {return  AudioParams();};
+
+  AudioParams getMixedAudioParams() override {return  AudioParams();};
+
 
  private:
   std::string outputFilePath_;
@@ -147,7 +158,7 @@ class H264FrameReceiver : public agora::media::IVideoEncodedFrameObserver {
         fileCount(0),
         fileSize_(0) {}
 
-  bool OnEncodedVideoFrame(agora::rtc::uid_t uid, const uint8_t* imageBuffer, size_t length,
+  bool onEncodedVideoFrameReceived(agora::rtc::uid_t uid, const uint8_t* imageBuffer, size_t length,
                                    const agora::rtc::EncodedVideoFrameInfo& videoEncodedFrameInfo)  override;
 
  private:
@@ -190,7 +201,7 @@ bool PcmFrameObserver::onPlaybackAudioFrameBeforeMixing(const char* channelId, a
   return true;
 }
 
-bool H264FrameReceiver::OnEncodedVideoFrame(agora::rtc::uid_t uid, const uint8_t* imageBuffer, size_t length,
+bool H264FrameReceiver::onEncodedVideoFrameReceived(agora::rtc::uid_t uid, const uint8_t* imageBuffer, size_t length,
                                    const agora::rtc::EncodedVideoFrameInfo& videoEncodedFrameInfo) {
   // Create new file to save received H264 frames
   if (!h264File_) {
@@ -270,14 +281,9 @@ int main(int argc, char* argv[]) {
   }
 
   // Create Agora connection
-  agora::rtc::AudioSubscriptionOptions audioSubOpt;
-  audioSubOpt.bytesPerSample = agora::rtc::TWO_BYTES_PER_SAMPLE;
-  audioSubOpt.numberOfChannels = options.audio.numOfChannels;
-  audioSubOpt.sampleRateHz = options.audio.sampleRate;
 
   agora::rtc::RtcConnectionConfiguration ccfg;
   ccfg.clientRoleType = agora::rtc::CLIENT_ROLE_AUDIENCE;
-  ccfg.audioSubscriptionOptions = audioSubOpt;
   ccfg.autoSubscribeAudio = false;
   ccfg.autoSubscribeVideo = false;
   ccfg.enableAudioRecordingOrPlayout =

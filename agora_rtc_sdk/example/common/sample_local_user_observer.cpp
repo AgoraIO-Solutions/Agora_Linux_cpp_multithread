@@ -54,6 +54,8 @@ void SampleLocalUserObserver::UnpublishVideoTrack(
 	local_user_->unpublishVideo(videoTrack);
 }
 
+
+
 void SampleLocalUserObserver::onUserAudioTrackSubscribed(
 		agora::user_id_t userId, agora::agora_refptr<agora::rtc::IRemoteAudioTrack> audioTrack)
 {
@@ -62,10 +64,14 @@ void SampleLocalUserObserver::onUserAudioTrackSubscribed(
 	if (remote_audio_track_ && audio_frame_observer_) {
 		local_user_->registerAudioFrameObserver(audio_frame_observer_);
 	}
+	if (remote_audio_track_ && audio_encoded_receiver_) {
+		agora::rtc::AudioEncFrameRecvParams para;
+		remote_audio_track_->registerAudioEncodedFrameReceiver(audio_encoded_receiver_,para);
+	}
 }
 
 void SampleLocalUserObserver::onUserVideoTrackSubscribed(
-		agora::user_id_t userId, agora::rtc::VideoTrackInfo trackInfo,
+		agora::user_id_t userId,const agora::rtc::VideoTrackInfo& trackInfo,
 		agora::agora_refptr<agora::rtc::IRemoteVideoTrack> videoTrack)
 {
 	AG_LOG(INFO, "onUserVideoTrackSubscribed: userId %s, codecType %d, encodedFrameOnly %d", userId,
@@ -99,9 +105,11 @@ void SampleLocalUserObserver::onFirstRemoteVideoDecoded(agora::user_id_t userId,
 	// x_offset_ += 300;
 	// y_offset_ += 300;
 	if (video_mixer_ && enable_video_mix_) {
-		remote_source_map_[std::string(userId)] = calculate_layout(width, height);
+		remote_source_map_[std::string(userId)] = videoInfo(width, height,false);
+		x_offset_ = 0;
+		y_offset_ = 0;
 		for (auto it = remote_source_map_.begin(); it != remote_source_map_.end(); it++) {
-			video_mixer_->setStreamLayout(it->first.c_str(), it->second);
+			video_mixer_->setStreamLayout(it->first.c_str(), calculate_layout(it->second.width,it->second.height));
 		}
 		video_mixer_->refresh();
 	}
@@ -117,15 +125,46 @@ agora::rtc::MixerLayoutConfig SampleLocalUserObserver::calculate_layout(int widt
 	mixConfig.y = y_offset_;
 	// x_offset_ += 300;
 	// y_offset_ += 300;
-	if (x_offset_ + width < 1280) {
+	if (x_offset_ + width < 1920) {
 		x_offset_ += width;
-		y_offset_ = y_offset_ > height ? y_offset_ : height;
+		y_offset_ = y_offset_;
 	} else {
 		x_offset_ = width;
 		y_offset_ += height;
 	}
 	AG_LOG(INFO, "the x_offset id %d y_offset is %d ", x_offset_, y_offset_);
 	return mixConfig;
+}
+
+void SampleLocalUserObserver::onUserVideoTrackStateChanged(
+    agora::user_id_t userId,
+    agora::agora_refptr<agora::rtc::IRemoteVideoTrack> videoTrack,
+    agora::rtc::REMOTE_VIDEO_STATE state,
+    agora::rtc::REMOTE_VIDEO_STATE_REASON reason, int elapsed) {
+   if(!(video_mixer_ && enable_video_mix_)) return;
+  if (state == 0) {
+	  if(remote_source_map_.find(std::string(userId))!=remote_source_map_.end())
+    remote_source_map_[std::string(userId)].muted = true;
+    x_offset_ = 0;
+    y_offset_ = 0;
+    for (auto it = remote_source_map_.begin(); it != remote_source_map_.end();
+         it++) {
+	if(!it->second.muted)
+      video_mixer_->setStreamLayout(it->first.c_str(), calculate_layout(it->second.width,it->second.height));
+    }
+    video_mixer_->refresh();
+   }else if(state == 1){
+	  if(remote_source_map_.find(std::string(userId))!=remote_source_map_.end())
+	   	remote_source_map_[std::string(userId)].muted = false;
+    x_offset_ = 0;
+    y_offset_ = 0;
+    for (auto it = remote_source_map_.begin(); it != remote_source_map_.end();
+         it++) {
+	if(!it->second.muted)
+      video_mixer_->setStreamLayout(it->first.c_str(), calculate_layout(it->second.width,it->second.height));
+    }
+    video_mixer_->refresh();
+   }
 }
 
 void SampleLocalUserObserver::onUserInfoUpdated(agora::user_id_t userId,

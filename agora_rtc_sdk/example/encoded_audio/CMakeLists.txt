@@ -15,7 +15,7 @@ file(GLOB SAMPLE_SEND_AAC_CPP_FILES "${PROJECT_SOURCE_DIR}/sample_send_aac.cpp"
      "${PROJECT_SOURCE_DIR}/../common/*.cpp")
 add_executable(sample_send_aac ${SAMPLE_SEND_AAC_CPP_FILES}
                                ${FILE_PARSER_CPP_FILES})
-# Build sample_send_h264_opus
+# Build sample_send_h264_opusw
 file(GLOB SAMPLE_SEND_H264_OPUS_CPP_FILES
      "${PROJECT_SOURCE_DIR}/sample_send_opus.cpp"
      "${PROJECT_SOURCE_DIR}/../common/*.cpp")
@@ -27,3 +27,12 @@ add_executable(
                         ${FILE_PARSER_CPP_FILES} ${OPUS_FILE_PARSER_CPP_FILES})
 target_compile_definitions(sample_send_opus PRIVATE __SUPPORT_OPUS__)
 target_link_libraries(sample_send_opus opusfile opus ogg)
+
+# Build sample_receive_encoded_audio
+file(GLOB SAMPLE_RECEIVE_ENCODED_AUDIO_CPP_FILES
+     "${PROJECT_SOURCE_DIR}/sample_receive_encoded_audio.cpp"
+     "${PROJECT_SOURCE_DIR}/../common/*.cpp")
+
+add_executable(
+          sample_receive_encoded_audio ${SAMPLE_RECEIVE_ENCODED_AUDIO_CPP_FILES}
+                         ${FILE_PARSER_CPP_FILES})

@@ -135,7 +135,7 @@ static void sendOnePcmFrame(const SampleOptions &options,
 	}
 
 	if (audioFrameSender->sendAudioPcmData(
-				frameBuf, 0, samplesPer10ms, agora::rtc::TWO_BYTES_PER_SAMPLE,
+				frameBuf, 0, 0,samplesPer10ms, agora::rtc::TWO_BYTES_PER_SAMPLE,
 				options.audio.numOfChannels, options.audio.sampleRate) < 0) {
 		AG_LOG(ERROR, "Failed to send audio frame!");
 	}

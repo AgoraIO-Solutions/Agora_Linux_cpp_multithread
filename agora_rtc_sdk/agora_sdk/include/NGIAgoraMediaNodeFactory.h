@@ -7,6 +7,7 @@
 #pragma once  // NOLINT(build/header_guard)
 
 #include "AgoraBase.h"
+#include <api/cpp/aosl_ares_class.h>
 
 namespace agora {
 namespace rtc {
@@ -17,6 +18,7 @@ class IRemoteAudioMixerSource;
 class ICameraCapturer;
 class IScreenCapturer;
 class IVideoMixerSource;
+class IAudioMixerSource;
 class IVideoFrameTransceiver;
 class IVideoFrameSender;
 class IVideoRenderer;
@@ -27,7 +29,8 @@ class IVideoEncodedImageSender;
 class IMediaPlayerSource;
 class IMediaPacketSender;
 class IMediaStreamingSource;
-
+class IScreenCapturer2;
+class IMediaRecorder2;
 
 /**
  * The `IMediaNodeFactory` class.
@@ -37,7 +40,9 @@ class IMediaNodeFactory : public RefCountInterface {
   /**
    * Creates a PCM audio data sender.
    *
-   * This method creates an `IAudioPcmDataSender` object, which can be used by \ref agora::base::IAgoraService::createCustomAudioTrack(agora_refptr< rtc::IAudioPcmDataSender > audioSource) "createCustomAudioTrack" to send PCM audio data.
+   * This method creates an `IAudioPcmDataSender` object, which can be used by \ref
+   * agora::base::IAgoraService::createCustomAudioTrack(agora_refptr< rtc::IAudioPcmDataSender >
+   * audioSource) "createCustomAudioTrack" to send PCM audio data.
    *
    * @return
    * - The pointer to \ref agora::rtc::IAudioPcmDataSender "IAudioPcmDataSender": Success.
@@ -48,24 +53,15 @@ class IMediaNodeFactory : public RefCountInterface {
   /**
    * Creates an encoded audio data sender.
    *
-   * This method creates an IAudioEncodedFrameSender object, which can be used by \ref agora::base::IAgoraService::createCustomAudioTrack(agora_refptr< rtc::IAudioEncodedFrameSender > audioSource, TMixMode mixMode) "createCustomAudioTrack" to send encoded audio data.
+   * This method creates an IAudioEncodedFrameSender object, which can be used by \ref
+   * agora::base::IAgoraService::createCustomAudioTrack(agora_refptr< rtc::IAudioEncodedFrameSender
+   * > audioSource, TMixMode mixMode) "createCustomAudioTrack" to send encoded audio data.
    *
    * @return
    * - The pointer to IAudioEncodedFrameSender: Success.
    * - A null pointer: Failure.
    */
   virtual agora_refptr<IAudioEncodedFrameSender> createAudioEncodedFrameSender() = 0;
-
-  /**
-   * Creates a remote audio mixer source object and returns the pointer.
-   *
-   * @param type The type of audio mixer source you want to create.
-   *
-   * @return
-   * - The pointer to \ref rtc::IRemoteAudioMixerSource "IRemoteAudioMixerSource", if the method call succeeds.
-   * - A null pointer, if the method call fails.
-   */
-  virtual agora_refptr<IRemoteAudioMixerSource> createRemoteAudioMixerSource() = 0;
 
   /**
    * Creates a camera capturer.
@@ -79,6 +75,7 @@ class IMediaNodeFactory : public RefCountInterface {
    */
   virtual agora_refptr<ICameraCapturer> createCameraCapturer() = 0;
 
+#if !defined(__ANDROID__) && !(defined(__APPLE__) && TARGET_OS_IPHONE)
   /**
    * Creates a screen capturer.
    *
@@ -90,8 +87,9 @@ class IMediaNodeFactory : public RefCountInterface {
    * - A null pointer: Failure.
    */
   virtual agora_refptr<IScreenCapturer> createScreenCapturer() = 0;
+#endif
 
-   /**
+  /**
    * Creates a video mixer.
    *
    * Once a video mixer object is created, you can use the video mixer data as the custom video
@@ -104,10 +102,22 @@ class IMediaNodeFactory : public RefCountInterface {
   virtual agora_refptr<IVideoMixerSource> createVideoMixer() = 0;
 
   /**
+   * Creates a audio mixer.
+   *
+   * Once a audio mixer object is created, you can use the audio mixer data as the custom audio
+   * source.
+   *
+   * @return
+   * - The pointer to IAudioMixerSource: Success.
+   * - A null pointer: Failure.
+   */
+  virtual agora_refptr<IAudioMixerSource> createAudioMixer() = 0;
+
+  /**
    * Creates a video transceiver.
    *
-   * Once a video transceiver object is created, you can use the video transceiver data as the custom video
-   * source.
+   * Once a video transceiver object is created, you can use the video transceiver data as the
+   * custom video source.
    *
    * @return
    * - The pointer to IVideoFrameTransceiver: Success.
@@ -118,8 +128,9 @@ class IMediaNodeFactory : public RefCountInterface {
   /**
    * Creates a video frame sender.
    *
-   * This method creates an `IVideoFrameSender` object, which can be used by \ref agora::base::IAgoraService::createCustomVideoTrack(agora_refptr<rtc::IVideoFrameSender> videoSource) "createCustomVideoTrack" to
-   * send the custom video data.
+   * This method creates an `IVideoFrameSender` object, which can be used by \ref
+   * agora::base::IAgoraService::createCustomVideoTrack(agora_refptr<rtc::IVideoFrameSender>
+   * videoSource) "createCustomVideoTrack" to send the custom video data.
    *
    * @return
    * - The pointer to \ref agora::rtc::IVideoFrameSender "IVideoFrameSender": Success.
@@ -130,7 +141,9 @@ class IMediaNodeFactory : public RefCountInterface {
   /**
    * Creates an encoded video image sender.
    *
-   * This method creates an `IVideoEncodedImageSender` object, which can be used by \ref agora::base::IAgoraService::createCustomVideoTrack(agora_refptr<rtc::IVideoEncodedImageSender> videoSource, SenderOptions& options)  "createCustomVideoTrack" to send the encoded video data.
+   * This method creates an `IVideoEncodedImageSender` object, which can be used by \ref
+   * agora::base::IAgoraService::createCustomVideoTrack(agora_refptr<rtc::IVideoEncodedImageSender>
+   * videoSource, SenderOptions& options)  "createCustomVideoTrack" to send the encoded video data.
    *
    * @return
    * - The pointer to `IVideoEncodedImageSender`: Success.
@@ -152,8 +165,8 @@ class IMediaNodeFactory : public RefCountInterface {
   /**
    * Creates an audio filter for the extension.
    *
-   * This method creates an `IAudioFilter` object, which can be used to filter the audio data from the
-   * inside extension.
+   * This method creates an `IAudioFilter` object, which can be used to filter the audio data from
+   * the inside extension.
    *
    * @param provider_name provider name string.
    * @param extension_name extension name string.
@@ -161,7 +174,8 @@ class IMediaNodeFactory : public RefCountInterface {
    * - The pointer to IAudioFilter: Success.
    * - A null pointer: Failure.
    */
-  virtual agora_refptr<IAudioFilter> createAudioFilter(const char* provider_name, const char* extension_name) = 0;
+  virtual agora_refptr<IAudioFilter> createAudioFilter(const char* provider_name,
+                                                       const char* extension_name) = 0;
 
   /**
    * Creates a video filter for the extension.
@@ -175,7 +189,8 @@ class IMediaNodeFactory : public RefCountInterface {
    * - The pointer to IVideoFilter: Success.
    * - A null pointer: Failure.
    */
-  virtual agora_refptr<IVideoFilter> createVideoFilter(const char* provider_name, const char* extension_name) = 0;
+  virtual agora_refptr<IVideoFilter> createVideoFilter(const char* provider_name,
+                                                       const char* extension_name) = 0;
 
   /**
    * Creates a video sink for the extension.
@@ -189,7 +204,8 @@ class IMediaNodeFactory : public RefCountInterface {
    * - The pointer to IVideoSinkBase: Success.
    * - A null pointer: Failure.
    */
-  virtual agora_refptr<IVideoSinkBase> createVideoSink(const char* provider_name, const char* extension_name) = 0;
+  virtual agora_refptr<IVideoSinkBase> createVideoSink(const char* provider_name,
+                                                       const char* extension_name) = 0;
 
   /**
    * Creates a media player source object and returns the pointer.
@@ -201,8 +217,10 @@ class IMediaNodeFactory : public RefCountInterface {
    * succeeds.
    * - A null pointer: Failure.
    */
-  virtual agora_refptr<IMediaPlayerSource> createMediaPlayerSource(media::base::MEDIA_PLAYER_SOURCE_TYPE type = agora::media::base::MEDIA_PLAYER_SOURCE_DEFAULT) = 0;
-  
+  virtual agora_refptr<IMediaPlayerSource> createMediaPlayerSource(
+      media::base::MEDIA_PLAYER_SOURCE_TYPE type =
+          agora::media::base::MEDIA_PLAYER_SOURCE_DEFAULT) = 0;
+
   /**
    * @brief Creates a media streaming source object and returns the pointer.
    *
@@ -224,6 +242,32 @@ class IMediaNodeFactory : public RefCountInterface {
    * - A null pointer: Failure.
    */
   virtual agora_refptr<IMediaPacketSender> createMediaPacketSender() = 0;
+
+  virtual agora_refptr<IMediaRecorder2> createMediaRecorder() = 0;
+
+#if defined(__ANDROID__) || (defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE)
+  /**
+   * Creates screen capture source extension with given provider&extension names
+   * @param provider_name provider name string.
+   * @param extension_name extension name string.
+   * @return
+   * - The pointer to IScreenCapturer: Success.
+   * - A null pointer: Failure.
+   */
+  virtual agora_refptr<IScreenCapturer2> createScreenCapturer2(const char* provider_name,
+                                                               const char* extension_name) = 0;
+#else
+  /**
+   * Creates screen capture source extension with given provider&extension names
+   * @param provider_name provider name string.
+   * @param extension_name extension name string.
+   * @return
+   * - The pointer to IScreenCapturer: Success.
+   * - A null pointer: Failure.
+   */
+  virtual agora_refptr<IScreenCapturer> createScreenCapturer(const char* provider_name,
+                                                             const char* extension_name) = 0;
+#endif
 
  protected:
   ~IMediaNodeFactory() {}
