@@ -19,3 +19,8 @@ Also, download the media files by running sync-data.sh script. These audio/video
 To send aac stream to Agora channel named "demo_channel". Note that `xxxxxx` should be replaced with your own App ID or token
 $ out/sample_send_aac --token XXXXXX --channelId demo_channel --audioFile test_data/send_audio.aac
 ```
+Using multi-thread to join channels and take snapshots of video from remote user 1234 every 20s from multi-channelsAdd commentMore actions
+$./sample_multithd_receive_yuv_pcm --token XXXXXX --channelId multidemo --multiChannels 50 --remoteUserId 1234
+
+Using multi-thread to join multiple channels and sending video frames
+./sample_multithd_send_yuv_pcm --token XXXXXX --channelId multidemo --userId 1234 --multiChannels 30

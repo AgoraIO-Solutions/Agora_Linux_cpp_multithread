@@ -35,9 +35,10 @@
 #define DEFAULT_FILE_LIMIT (100 * 1024 * 1024)
 #define STREAM_TYPE_HIGH "high"
 #define STREAM_TYPE_LOW "low"
+#define COMPOSITE 1
 
-int time_20_s = 20;
-int time_2_s = 2;
+int time_in_s = 5;
+int time_ss_s = 1;
 
 static bool exitFlag = false;
 static void SignalHandler(int sigNo) { exitFlag = true; }
@@ -74,7 +75,9 @@ public:
       : outputFilePath_(outputFilePath),
         pcmFile_(nullptr),
         fileCount(0),
-        fileSize_(0) {}
+        fileSize_(0)
+  {
+  }
 
   bool onPlaybackAudioFrame(const char *channelId, AudioFrame &audioFrame) override { return true; };
 
@@ -108,11 +111,23 @@ class YuvFrameObserver : public agora::rtc::IVideoFrameObserver2
 public:
   YuvFrameObserver(const std::string &outputFilePath, bool *video_frame_saved_flag)
       : outputFilePath_(outputFilePath),
+#if COMPOSITE
+        yuvFileCom_(nullptr),
+        jpgFileCom_(nullptr),
+        fileCountCom(0),
+        fileSizeCom_(0),
+        ybufCom_(nullptr),
+        ubufCom_(nullptr),
+        vbufCom_(nullptr),
+        hostProcessedNum_(0),
+#endif
         yuvFile_(nullptr),
         jpgFile_(nullptr),
         fileCount(0),
         fileSize_(0),
-        video_frame_saved_flag_(video_frame_saved_flag) {}
+        video_frame_saved_flag_(video_frame_saved_flag)
+  {
+  }
 
   void onFrame(const char *channelId, agora::user_id_t remoteUid, const agora::media::base::VideoFrame *frame) override;
 
@@ -120,6 +135,18 @@ public:
 
 private:
   std::string outputFilePath_;
+#if COMPOSITE
+  FILE *yuvFileCom_;
+  FILE *jpgFileCom_;
+  std::string fileNameJpgCom_;
+  std::string fileNameYUVCom_;
+  unsigned char *ybufCom_;
+  unsigned char *ubufCom_;
+  unsigned char *vbufCom_;
+  int fileCountCom;
+  int fileSizeCom_;
+  int hostProcessedNum_;
+#endif
   FILE *yuvFile_;
   FILE *jpgFile_;
   int fileCount;
@@ -193,9 +220,11 @@ static int connectWorker(agora::base::IAgoraService *service, int channel_index,
     localUserObserver->setAudioFrameObserver(pcmFrameObserver.get());
 #endif
     *(saveVideoControl.video_frame_saved_flag) = 0;
+
     // Register video frame observer to receive video stream
-    std::shared_ptr<YuvFrameObserver> yuvFrameObserver =
-        // std::make_shared<YuvFrameObserver>(options.videoFile);
+    std::shared_ptr<YuvFrameObserver>
+        yuvFrameObserver =
+            // std::make_shared<YuvFrameObserver>(options.videoFile);
         std::make_shared<YuvFrameObserver>(options.videoFile, saveVideoControl.video_frame_saved_flag);
     localUserObserver->setVideoFrameObserver(yuvFrameObserver.get());
 
@@ -211,9 +240,9 @@ static int connectWorker(agora::base::IAgoraService *service, int channel_index,
     current_conn_time = time(0);
 
     // Periodically check if in the channel for 2s
-    while ((!*saveVideoControl.video_frame_saved_flag || (time(0) - current_conn_time <= time_2_s)) && (!exitFlag))
+    while ((!*saveVideoControl.video_frame_saved_flag || (time(0) - current_conn_time <= time_ss_s)) && (!exitFlag))
     {
-      usleep(500000);
+      usleep(100000);
     }
 
     // Unregister audio & video frame observers
@@ -238,11 +267,11 @@ static int connectWorker(agora::base::IAgoraService *service, int channel_index,
     connection = nullptr;
 
     // Periodically check if it has been 20s
-    while (((time(0) - current_conn_time) < time_20_s) && (!exitFlag))
+    while (((time(0) - current_conn_time) < time_in_s) && (!exitFlag))
     {
       // AG_LOG(INFO, "channel index: %d", channel_index);
       // usleep(5000000); // 5s
-      sleep(2); // 5s
+      sleep(1); // 5s
     }
   };
   return 0;
@@ -291,20 +320,25 @@ void YuvFrameObserver::onFrame(const char *channelId, agora::user_id_t remoteUid
   // check to see if frame is already saved
   if (*video_frame_saved_flag_)
   {
-    AG_LOG(INFO, "jpeg already saved, channe index %s", channelId);
+    AG_LOG(INFO, "YUV or jpeg already saved, channel index %s", channelId);
     return;
+  }
+  else
+  {
+    AG_LOG(INFO, "Frame observer channel index %s, %s", channelId, remoteUid);
   }
   // Create new file to save received YUV frames
   std::string fileName;
   std::string fileNameJpg;
-#if 0
+#if 1
   std::string fileNameYUV;
   std::string command;
+#if 0
   if (!yuvFile_)
   {
     fileName = (++fileCount > 1)
-                   ? (outputFilePath_ + "_" + channelId + "_" + to_string(fileCount))
-                   : outputFilePath_ + "_" + channelId + "_" + to_string(time(0));
+                   ? (outputFilePath_ + "_" + channelId + "_" + remoteUid + "_" + to_string(fileCount))
+                   : outputFilePath_ + "_" + channelId + "_" + remoteUid + "_" + to_string(time(0));
     fileNameYUV = fileName + ".yuv";
     fileNameJpg = fileName + ".jpg";
     if (!(yuvFile_ = fopen(fileNameYUV.c_str(), "w+")))
@@ -353,10 +387,220 @@ void YuvFrameObserver::onFrame(const char *channelId, agora::user_id_t remoteUid
   }
 
   // convert to jpg format
-  command = "ffmpeg -f rawvideo -vcodec rawvideo -s " + to_string(videoFrame->yStride) + "x" + to_string(videoFrame->height) + " -r 1 -pix_fmt yuv420p -i " + fileNameYUV + " -preset ultrafast -qp 0 " + fileNameJpg;
-  //system(command.c_str());
-  //AG_LOG(INFO, "ffmpeg conver YUV to jpeg, command: %s", command.c_str());
+  // command = "ffmpeg -f rawvideo -vcodec rawvideo -s " + to_string(videoFrame->yStride) + "x" + to_string(videoFrame->height) 
+  + " -r 1 -pix_fmt yuv420p -i " + fileNameYUV + " -preset ultrafast -qp 0 " + fileNameJpg;
+  // system(command.c_str());
+  // AG_LOG(INFO, "ffmpeg conver YUV to jpeg, command: %s", command.c_str());
+#endif
+#if COMPOSITE
+#define NUM_OF_HOST 4
+  // std::string fileNameCom;
+  int verticalIndex[2] = {0, 1};
+  int horizontalIndex[2] = {0, 1};
+  int strideOffset, heightOffset; // assuming all video streams have the same size.
 
+  
+  if (!yuvFileCom_)
+  {
+    fileNameYUVCom_ = (outputFilePath_ + "_" + channelId + "_" + "multiuser" + "_" + to_string(time(0)) + ".yuv");
+
+    fileNameJpgCom_ = fileNameYUVCom_ + ".jpg";
+    AG_LOG(INFO, "Created a file %s to save received YUV frames for composite",
+           fileNameYUVCom_.c_str());
+
+    if (!(yuvFileCom_ = fopen(fileNameYUVCom_.c_str(), "w+")))
+    {
+      AG_LOG(ERROR, "Failed to create received video file for composite %s",
+             fileNameYUVCom_.c_str());
+      return;
+    }
+    else
+    {
+      AG_LOG(INFO, "writing composite YUV in Frame observer channel id %s, %s", channelId, fileNameYUVCom_.c_str());
+    }
+  }
+
+  int width = videoFrame->yStride;
+  int height = videoFrame->height;
+  int YSize = width * height;
+  int UVSize = YSize >> 2;
+  int totalFrameSize = (YSize + (UVSize << 1));
+  int totalSizeCom = totalFrameSize * NUM_OF_HOST; // assuming all video streams have the same size.
+
+  if ((ybufCom_ == nullptr) && !hostProcessedNum_)
+  {
+    if ((ybufCom_ = (unsigned char *)malloc(YSize * NUM_OF_HOST)) == NULL)
+    {
+      AG_LOG(ERROR, "yuv composit buf malloc failed: %s", std::strerror(errno));
+      return;
+    }
+    memset(ybufCom_, 0, YSize * NUM_OF_HOST);
+    if ((ubufCom_ = (unsigned char *)malloc(UVSize * NUM_OF_HOST)) == NULL)
+    {
+      AG_LOG(ERROR, "u composit buf malloc failed: %s", std::strerror(errno));
+      return;
+    }
+    memset(ubufCom_, 0, UVSize * NUM_OF_HOST);
+    if ((vbufCom_ = (unsigned char *)malloc(UVSize * NUM_OF_HOST)) == NULL)
+    {
+      AG_LOG(ERROR, "v composit buf malloc failed: %s", std::strerror(errno));
+      return;
+    }
+    memset(vbufCom_, 0, UVSize * NUM_OF_HOST);
+  }
+  AG_LOG(INFO, "writing composite YUV in a buffer first %p, %d, host num %d, ruid: %d stride %d, height %d", ybufCom_, YSize * NUM_OF_HOST,
+         hostProcessedNum_, atoi(remoteUid), width, height);
+  switch ((int)atoi(remoteUid))
+  {
+  case 1:
+    strideOffset = horizontalIndex[0];
+    heightOffset = verticalIndex[0];
+    hostProcessedNum_ |= 1;
+    break;
+  case 2:
+    strideOffset = horizontalIndex[1];
+    heightOffset = verticalIndex[0];
+    hostProcessedNum_ |= 1 << 1;
+    break;
+  case 3:
+    strideOffset = horizontalIndex[0];
+    heightOffset = verticalIndex[1];
+    hostProcessedNum_ |= 1 << 2;
+    break;
+  case 4:
+    strideOffset = horizontalIndex[1];
+    heightOffset = verticalIndex[1];
+    hostProcessedNum_ |= 1 << 3;
+    break;
+  default:
+    strideOffset = horizontalIndex[0];
+    heightOffset = verticalIndex[0];
+    hostProcessedNum_ = 1;
+    return;
+  }
+
+  unsigned char *ybase, *ubase, *vbase;
+  ybase = videoFrame->yBuffer;
+  ubase = videoFrame->uBuffer;
+  vbase = videoFrame->vBuffer;
+  if (hostProcessedNum_ <= (1 << NUM_OF_HOST) - 1)
+  {
+    unsigned char *StartP;
+    int offset = strideOffset * width + heightOffset * YSize * 2; // offset for Y
+    unsigned char *srcP = ybase;
+    // Composite Y planar
+    StartP = ybufCom_ + offset;
+    AG_LOG(INFO, "writing composite Y in a buffer first %p, for host %d, start ptr %d, offset %d ", ybufCom_, hostProcessedNum_, (int)(StartP - ybufCom_), offset);
+
+    for (int i = 0; i < height; i++)
+    {
+
+      memcpy(StartP, srcP, width);
+      srcP += width;
+      StartP += (width << 1);
+    }
+    AG_LOG(INFO, "writing composite Y in a buffer first %p, for host %d, start ptr %p", ybufCom_, hostProcessedNum_, StartP);
+
+    // Composite U planar
+    width = videoFrame->uStride;
+    height = height >> 1;
+    offset = strideOffset * width + heightOffset * UVSize * 2;
+    StartP = ubufCom_ + offset;
+    srcP = ubase;
+    AG_LOG(INFO, "writing composite U in a buffer first %p, for host %d, start ptr %d, offset %d, ustride %d ", ubufCom_, hostProcessedNum_, (int)(StartP - ubufCom_), offset, width);
+
+    for (int i = 0; i < height; i++)
+    {
+      memcpy(StartP, srcP, width);
+      StartP += (width << 1);
+      srcP += width;
+    }
+
+    // Composite V Planar
+    width = videoFrame->vStride;
+    offset = strideOffset * width + heightOffset * UVSize * 2;
+    StartP = vbufCom_ + offset;
+    srcP = vbase;
+    AG_LOG(INFO, "writing composite V in a buffer first %p, for host %d, start ptr %d, offset %d, vstride: %d", vbufCom_, hostProcessedNum_, (int)(StartP - vbufCom_), offset, width);
+
+    for (int i = 0; i < height; i++)
+    {
+      memcpy(StartP, srcP, width);
+      srcP += width;
+      StartP += (width << 1);
+    }
+  }
+
+  AG_LOG(INFO, "how many hosts yet? writing composite Y in a buffer first %p, for host %d, %s ", ybufCom_, hostProcessedNum_, fileNameYUVCom_.c_str());
+
+  if (hostProcessedNum_ >= (1 << NUM_OF_HOST) - 1)
+  {
+    // write composite buffer to the file
+    *video_frame_saved_flag_ = 1;
+    if (fwrite(ybufCom_, 1, YSize * NUM_OF_HOST, yuvFileCom_) != (YSize * NUM_OF_HOST))
+    {
+      AG_LOG(ERROR, "Error writing decoded video data: %s", std::strerror(errno));
+    }
+    else
+    {
+      AG_LOG(ERROR, "writing Y raw video data: %d", YSize * NUM_OF_HOST);
+    }
+
+    if (fwrite(ubufCom_, 1, UVSize * NUM_OF_HOST, yuvFileCom_) != (UVSize * NUM_OF_HOST))
+    {
+      AG_LOG(ERROR, "Error writing decoded video data: %s", std::strerror(errno));
+    }
+    else
+    {
+      AG_LOG(ERROR, "writing U raw video data: %d", UVSize * NUM_OF_HOST);
+    }
+    if (fwrite(vbufCom_, 1, UVSize * NUM_OF_HOST, yuvFileCom_) != (UVSize * NUM_OF_HOST))
+    {
+      AG_LOG(ERROR, "Error writing decoded video data: %s", std::strerror(errno));
+    }
+    else
+    {
+      AG_LOG(ERROR, "writing V raw video data: %d", UVSize * NUM_OF_HOST);
+    }
+    if (ybufCom_)
+    {
+      free(ybufCom_);
+      ybufCom_ = nullptr;
+    }
+    if (ubufCom_)
+    {
+      free(ubufCom_);
+      ubufCom_ = nullptr;
+    }
+    if (vbufCom_)
+    {
+      free(vbufCom_);
+      vbufCom_ = nullptr;
+    }
+    hostProcessedNum_ = 0;
+    fileSizeCom_ += totalSizeCom;
+    fileCountCom++;
+    fclose(yuvFileCom_);
+    yuvFileCom_ = nullptr;
+    fileSizeCom_ = 0;
+
+    {
+      AG_LOG(INFO, "convert jpeg from yuv %s to %s ", fileNameYUVCom_.c_str(), fileNameJpgCom_.c_str());
+
+      // convert the composit file to jpg format
+      int hshift = 1;
+      int vshift = (NUM_OF_HOST >> 2) ? 1 : 0;
+      command = "ffmpeg -f rawvideo -vcodec rawvideo -s " + to_string(videoFrame->yStride << hshift) + "x" +
+                to_string(videoFrame->height << vshift) + " -r 1 -pix_fmt yuv420p -i " + fileNameYUVCom_ + " -preset ultrafast -qp 0 " + fileNameJpgCom_;
+      system(command.c_str());
+      AG_LOG(INFO, "ffmpeg convert YUV to jpeg, command: %s", command.c_str());
+      
+    }
+  }
+
+#else  // COMPOSIT
+  *video_frame_saved_flag_ = 1;
+#endif // COMPOSIT
 #else
   struct jpeg_compress_struct cinfo;
   struct jpeg_error_mgr jerr;
@@ -435,8 +679,8 @@ void YuvFrameObserver::onFrame(const char *channelId, agora::user_id_t remoteUid
     yuvbuf = NULL;
   }
   // AG_LOG(INFO, "libjpeg convert YUV to jpeg");
-#endif
   *video_frame_saved_flag_ = 1;
+#endif
   return;
 };
 
